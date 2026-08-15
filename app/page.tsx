@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { dict, type Lang } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import TestSessionCard from "@/components/TestSessionCard";
@@ -38,12 +39,18 @@ export default function Home() {
           {t.heroBody}
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <button className="focus-ring rounded-full bg-ink px-6 py-3 text-sm font-semibold text-parchment transition-opacity hover:opacity-90">
+          <Link
+            href="/register"
+            className="focus-ring rounded-full bg-ink px-6 py-3 text-sm font-semibold text-parchment transition-opacity hover:opacity-90"
+          >
             {t.ctaPrimary}
-          </button>
-          <button className="focus-ring rounded-full border border-ink/15 bg-white px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-ink/5">
+          </Link>
+          <Link
+            href="/login"
+            className="focus-ring rounded-full border border-ink/15 bg-white px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-ink/5"
+          >
             {t.ctaSecondary}
-          </button>
+          </Link>
         </div>
       </section>
 

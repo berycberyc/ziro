@@ -3,7 +3,7 @@ export type Lang = "kk" | "ru";
 export const dict = {
   kk: {
     tagline: "Байқау тесттерге тіркелу порталы",
-    heroTitle: "Балаңыздың келесі байқауын осында броньдаңыз",
+    heroTitle: "Балаңыздың келесі байқау тестін осында броньдаңыз",
     heroBody:
       "НЗМ, БИЛ және РФММ байқау тесттерін офлайн немесе онлайн тапсырып нәтижені алыңыз.",
     ctaPrimary: "Тіркелу",
@@ -15,6 +15,17 @@ export const dict = {
     book: "Тіркелу",
     footerNote: "© Ziro. Барлық құқықтар қорғалған.",
     testNames: { NISH: "НЗМ", BIL: "БИЛ", RFMSH: "РФММ" },
+    fullName: "Аты-жөні",
+    phone: "Телефон",
+    email: "Email",
+    password: "Құпия сөз",
+    registerTitle: "Тіркелу",
+    registerSubmit: "Тіркелу",
+    haveAccount: "Аккаунтыңыз бар ма?",
+    loginTitle: "Кіру",
+    loginSubmit: "Кіру",
+    noAccount: "Аккаунтыңыз жоқ па?",
+    authError: "Қате шықты. Деректерді тексеріп, қайта көріңіз.",
   },
   ru: {
     tagline: "Портал регистрации на пробные тесты",
@@ -30,5 +41,16 @@ export const dict = {
     book: "Записаться",
     footerNote: "© Ziro. Все права защищены.",
     testNames: { NISH: "НИШ", BIL: "БИЛ", RFMSH: "РФМШ" },
+    fullName: "ФИО",
+    phone: "Телефон",
+    email: "Email",
+    password: "Пароль",
+    registerTitle: "Регистрация",
+    registerSubmit: "Зарегистрироваться",
+    haveAccount: "Уже есть аккаунт?",
+    loginTitle: "Вход",
+    loginSubmit: "Войти",
+    noAccount: "Нет аккаунта?",
+    authError: "Произошла ошибка. Проверьте данные и попробуйте снова.",
   },
 } as const;
