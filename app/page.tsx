@@ -6,17 +6,17 @@ import { useRouter } from "next/navigation";
 import { dict, type Lang } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import TestSessionCard from "@/components/TestSessionCard";
-import { getUpcomingSessionTests, type SessionTestOption } from "@/lib/sessions";
+import { getUpcomingSessions, type SessionSummary } from "@/lib/sessions";
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("kk");
-  const [sessions, setSessions] = useState<SessionTestOption[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const t = dict[lang];
   const router = useRouter();
 
   useEffect(() => {
-    getUpcomingSessionTests().then((data) => {
+    getUpcomingSessions().then((data) => {
       setSessions(data);
       setLoaded(true);
     });
@@ -68,11 +68,13 @@ export default function Home() {
           )}
           {sessions.map((s) => (
             <TestSessionCard
-              key={`${s.sessionId}-${s.testTypeCode}`}
-              type={t.testNames[s.testTypeCode as keyof typeof t.testNames] ?? s.testTypeCode}
+              key={s.sessionId}
+              title={lang === "kk" ? s.titleKk : s.titleRu}
               date={s.sessionDate}
               price={`${s.price.toLocaleString("ru-RU")} ₸`}
-              formatNote={t.formatNote}
+              typesNote={s.testTypeCodes
+                .map((code) => t.testNames[code as keyof typeof t.testNames] ?? code)
+                .join(" · ")}
               bookLabel={t.book}
               onBook={() => router.push("/register")}
             />
