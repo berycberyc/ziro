@@ -3,8 +3,13 @@
 import { useState } from "react";
 import { dict, type Lang } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import RoleCard from "@/components/RoleCard";
-import TestTypeCard from "@/components/TestTypeCard";
+import TestSessionCard from "@/components/TestSessionCard";
+
+const upcomingTests = [
+  { code: "NISH" as const, date: "2026-09-05", format: "offline" as const, price: "8 000 ₸", seatsLeft: 12 },
+  { code: "BIL" as const, date: "2026-09-12", format: "online" as const, price: "6 000 ₸", seatsLeft: 30 },
+  { code: "RFMSH" as const, date: "2026-09-19", format: "offline" as const, price: "7 000 ₸", seatsLeft: 5 },
+];
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("kk");
@@ -13,13 +18,16 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-parchment">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <span className="font-display text-2xl font-extrabold tracking-tight text-ink">
-          Ziro
-        </span>
+        <div className="flex items-center gap-2">
+          <img src="/logo.jpg" alt="Ziro" className="h-9 w-9 rounded-lg object-cover" />
+          <span className="font-display text-2xl font-extrabold tracking-tight text-ink">
+            Ziro
+          </span>
+        </div>
         <LanguageSwitcher lang={lang} onChange={setLang} />
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 pb-20 pt-10 sm:pt-16">
+      <section className="mx-auto max-w-6xl px-6 pb-16 pt-10 sm:pt-16">
         <p className="text-sm font-semibold uppercase tracking-widest text-gold">
           {t.tagline}
         </p>
@@ -39,29 +47,25 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 pb-20">
-        <h2 className="font-display text-2xl font-bold text-ink">{t.rolesTitle}</h2>
-        <div className="mt-6 grid gap-5 sm:grid-cols-3">
-          <RoleCard tone="parent" index="01" title={t.parentTitle} body={t.parentBody} />
-          <RoleCard tone="teacher" index="02" title={t.teacherTitle} body={t.teacherBody} />
-          <RoleCard tone="admin" index="03" title={t.adminTitle} body={t.adminBody} />
-        </div>
-      </section>
-
       <section className="mx-auto max-w-6xl px-6 pb-24">
         <h2 className="font-display text-2xl font-bold text-ink">{t.testsTitle}</h2>
-        <div className="mt-6 grid gap-5 sm:grid-cols-3">
-          <TestTypeCard
-            name="НИШ"
-            stages="Математика · Сандық сипаттама · Естествознание · Тілдер"
-            format="ABCD"
-          />
-          <TestTypeCard
-            name="БИЛ"
-            stages="Математика · Грамотность чтения"
-            format="ABCD"
-          />
-          <TestTypeCard name="РФМШ" stages="Математика" format="Сандық жауап" />
+        <div className="mt-6 flex flex-col gap-4">
+          {upcomingTests.map((session) => (
+            <TestSessionCard
+              key={`${session.code}-${session.date}`}
+              type={t.testNames[session.code]}
+              date={session.date}
+              format={session.format}
+              price={session.price}
+              seatsLeft={session.seatsLeft}
+              labels={{
+                online: t.online,
+                offline: t.offline,
+                seats: t.seats,
+                book: t.book,
+              }}
+            />
+          ))}
         </div>
       </section>
 

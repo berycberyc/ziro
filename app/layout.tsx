@@ -15,8 +15,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Ziro — сынақ тесттерге тіркелу порталы",
-  description: "Ziro: пробные тесты НИШ, БИЛ, РФМШ — тіркелу, төлем, нәтижелер",
+  title: "Ziro — байқау тесттерге тіркелу порталы",
+  description: "Ziro: НЗМ, БИЛ, РФММ байқау тесттері — тіркелу, төлем, нәтижелер",
 };
 
 export default function RootLayout({
