@@ -31,3 +31,9 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+@media print {
+  nav {
+    display: none !important;
+  }
+}
