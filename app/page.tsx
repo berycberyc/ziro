@@ -1,20 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { dict, type Lang } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import TestSessionCard from "@/components/TestSessionCard";
-
-const upcomingTests = [
-  { code: "NISH" as const, date: "2026-09-05", format: "offline" as const, price: "8 000 ₸", seatsLeft: 12 },
-  { code: "BIL" as const, date: "2026-09-12", format: "online" as const, price: "6 000 ₸", seatsLeft: 30 },
-  { code: "RFMSH" as const, date: "2026-09-19", format: "offline" as const, price: "7 000 ₸", seatsLeft: 5 },
-];
+import { getUpcomingSessionTests, type SessionTestOption } from "@/lib/sessions";
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("kk");
+  const [sessions, setSessions] = useState<SessionTestOption[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const t = dict[lang];
+  const router = useRouter();
+
+  useEffect(() => {
+    getUpcomingSessionTests().then((data) => {
+      setSessions(data);
+      setLoaded(true);
+    });
+  }, []);
 
   return (
     <main className="min-h-screen bg-parchment">
@@ -57,20 +63,18 @@ export default function Home() {
       <section className="mx-auto max-w-6xl px-6 pb-24">
         <h2 className="font-display text-2xl font-bold text-ink">{t.testsTitle}</h2>
         <div className="mt-6 flex flex-col gap-4">
-          {upcomingTests.map((session) => (
+          {loaded && sessions.length === 0 && (
+            <p className="text-sm text-ink/50">{t.noSessions}</p>
+          )}
+          {sessions.map((s) => (
             <TestSessionCard
-              key={`${session.code}-${session.date}`}
-              type={t.testNames[session.code]}
-              date={session.date}
-              format={session.format}
-              price={session.price}
-              seatsLeft={session.seatsLeft}
-              labels={{
-                online: t.online,
-                offline: t.offline,
-                seats: t.seats,
-                book: t.book,
-              }}
+              key={`${s.sessionId}-${s.testTypeCode}`}
+              type={t.testNames[s.testTypeCode as keyof typeof t.testNames] ?? s.testTypeCode}
+              date={s.sessionDate}
+              price={`${s.price.toLocaleString("ru-RU")} ₸`}
+              formatNote={t.formatNote}
+              bookLabel={t.book}
+              onBook={() => router.push("/register")}
             />
           ))}
         </div>
