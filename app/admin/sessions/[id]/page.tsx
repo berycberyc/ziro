@@ -66,10 +66,14 @@ export default function AdminSessionDetailPage() {
   }
 
   async function markPaid(regId: string) {
-    await supabase
+    const { error } = await supabase
       .from("registrations")
       .update({ payment_status: "paid" })
       .eq("id", regId);
+    if (error) {
+      alert("Қате: " + error.message);
+      return;
+    }
     load();
   }
 
