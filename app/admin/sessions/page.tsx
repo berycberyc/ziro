@@ -13,6 +13,8 @@ type Session = {
   session_date: string;
   price: number;
   is_active: boolean;
+  is_checking: boolean;
+  has_results: boolean;
 };
 
 export default function AdminSessionsPage() {
@@ -22,7 +24,7 @@ export default function AdminSessionsPage() {
   const loadSessions = useCallback(async () => {
     const { data } = await supabase
       .from("test_sessions")
-      .select("id, title_kk, title_ru, session_date, price, is_active")
+      .select("id, title_kk, title_ru, session_date, price, is_active, is_checking, has_results")
       .order("session_date", { ascending: true });
     setSessions(data ?? []);
   }, []);

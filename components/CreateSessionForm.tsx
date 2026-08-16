@@ -15,7 +15,11 @@ export default function CreateSessionForm({
   const [titleKk, setTitleKk] = useState("");
   const [titleRu, setTitleRu] = useState("");
   const [sessionDate, setSessionDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [address, setAddress] = useState("");
   const [price, setPrice] = useState("");
+  const [registrationOpensAt, setRegistrationOpensAt] = useState("");
+  const [registrationClosesAt, setRegistrationClosesAt] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -37,7 +41,12 @@ export default function CreateSessionForm({
         title_kk: titleKk,
         title_ru: titleRu,
         session_date: sessionDate,
+        start_time: startTime || null,
+        address: address || null,
         price: Number(price),
+        registration_opens_at: registrationOpensAt || null,
+        registration_closes_at: registrationClosesAt || null,
+        is_active: true,
       })
       .select()
       .single();
@@ -66,7 +75,11 @@ export default function CreateSessionForm({
     setTitleKk("");
     setTitleRu("");
     setSessionDate("");
+    setStartTime("");
+    setAddress("");
     setPrice("");
+    setRegistrationOpensAt("");
+    setRegistrationClosesAt("");
     setSelectedTypes([]);
     onCreated();
   }
@@ -96,6 +109,19 @@ export default function CreateSessionForm({
           onChange={(e) => setSessionDate(e.target.value)}
         />
         <input
+          type="time"
+          placeholder="Басталу уақыты"
+          className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+        />
+        <input
+          placeholder="Мекенжайы / Адрес"
+          className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm sm:col-span-2"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+        />
+        <input
           required
           type="number"
           placeholder="Баға / Цена (₸)"
@@ -105,11 +131,41 @@ export default function CreateSessionForm({
         />
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-ink/50">
+            Тіркеу басталады
+          </label>
+          <input
+            type="datetime-local"
+            className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            value={registrationOpensAt}
+            onChange={(e) => setRegistrationOpensAt(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-ink/50">
+            Тіркеу аяқталады
+          </label>
+          <input
+            type="datetime-local"
+            className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            value={registrationClosesAt}
+            onChange={(e) => setRegistrationClosesAt(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div>
         <p className="mb-2 text-sm font-medium text-ink/70">
           Экзамен түрлері / Виды экзаменов
         </p>
         <div className="flex flex-wrap gap-2">
+          {testTypes.length === 0 && (
+            <p className="text-xs text-ink/50">
+              Әзірге тест түрі жоқ. Оны қосу үшін Android қолданбасын пайдаланыңыз.
+            </p>
+          )}
           {testTypes.map((tt) => (
             <button
               type="button"
