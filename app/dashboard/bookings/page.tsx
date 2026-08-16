@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 type Booking = {
   id: string;
+  short_code: string | null;
   format: string;
   payment_status: string;
   classroom: string | null;

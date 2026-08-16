@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const navItems = [
   { href: "/admin", label: "Басты бет" },
   { href: "/admin/sessions", label: "Сессиялар" },
+  { href: "/admin/zipgrade", label: "ZipGrade" },
 ];
 
 export default function AdminSidebar() {
