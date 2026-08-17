@@ -187,4 +187,4 @@ export const dict = {
     teacherScanTitle: "Сканирование пропуска",
     teacherScanPlaceholder: "Этот раздел находится в разработке.",
   },
-} as const;
+};
