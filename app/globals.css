@@ -36,4 +36,13 @@ body {
   nav {
     display: none !important;
   }
+  header {
+    display: none !important;
+  }
+  .print-hide {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
 }

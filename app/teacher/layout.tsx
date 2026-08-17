@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
-import TeacherSidebar from "@/components/TeacherSidebar";
+import AppShell from "@/components/AppShell";
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -37,10 +37,11 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     return <main className="p-10 text-ink/70">{t.teacherNoAccess}</main>;
   }
 
+  const navItems = [{ href: "/teacher/scan", label: t.navScan }];
+
   return (
-    <div className="flex min-h-screen flex-col bg-parchment sm:flex-row">
-      <TeacherSidebar />
-      <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">{children}</div>
-    </div>
+    <AppShell navItems={navItems} accent="teacher">
+      {children}
+    </AppShell>
   );
 }

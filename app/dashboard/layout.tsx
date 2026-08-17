@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
-import ParentSidebar from "@/components/ParentSidebar";
+import AppShell from "@/components/AppShell";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -33,24 +33,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <main className="p-10 text-ink/50">{t.loading}</main>;
   }
 
+  const navItems = [
+    { href: "/dashboard/profile", label: t.navProfile },
+    { href: "/dashboard/students", label: t.navStudents },
+    { href: "/dashboard/tests", label: t.navTests },
+    { href: "/dashboard/bookings", label: t.navBookings },
+  ];
+
   return (
-    <div className="flex min-h-screen flex-col bg-parchment sm:flex-row">
-      <ParentSidebar />
-      <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <AppShell
+      navItems={navItems}
+      accent="parent"
+      topRight={
+        <>
           <span className="text-sm text-ink/50">{email}</span>
-          <div className="flex items-center gap-3">
-            <LanguageSwitcher lang={lang} onChange={setLang} />
-            <button
-              onClick={handleLogout}
-              className="focus-ring rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink hover:bg-ink/5"
-            >
-              {t.logout}
-            </button>
-          </div>
-        </div>
-        {children}
-      </div>
-    </div>
+          <LanguageSwitcher lang={lang} onChange={setLang} />
+          <button
+            onClick={handleLogout}
+            className="focus-ring rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-ink/5"
+          >
+            {t.logout}
+          </button>
+        </>
+      }
+    >
+      {children}
+    </AppShell>
   );
 }

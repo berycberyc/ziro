@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
-import AdminSidebar from "@/components/AdminSidebar";
+import AppShell from "@/components/AppShell";
+
+const navItems = [
+  { href: "/admin/sessions", label: "Сессиялар" },
+  { href: "/admin/test-types", label: "Тест түрлері" },
+  { href: "/admin/bookings", label: "Бронирование" },
+  { href: "/admin/results", label: "Нәтижелер" },
+  { href: "/admin/online-test", label: "Онлайн тест" },
+  { href: "/admin/zipgrade", label: "ZipGrade" },
+];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -38,9 +47,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-parchment sm:flex-row">
-      <AdminSidebar />
-      <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">{children}</div>
-    </div>
+    <AppShell navItems={navItems} accent="admin">
+      {children}
+    </AppShell>
   );
 }
