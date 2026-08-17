@@ -123,15 +123,36 @@ export default function BookingsPage() {
     return { text: t.statusPending, color: "bg-teacher-soft text-teacher" };
   }
 
-  function printOne(id: string) {
-    document.querySelectorAll("[data-pass-card]").forEach((el) => {
-      if (el.getAttribute("data-id") !== id) el.classList.add("print-hide");
-      else el.classList.remove("print-hide");
-    });
-    window.print();
-    window.onafterprint = () => {
-      document.querySelectorAll(".print-hide").forEach((el) => el.classList.remove("print-hide"));
-    };
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  async function downloadPass(id: string, fileName: string) {
+    const node = document.querySelector<HTMLElement>(`[data-pass-card][data-id="${id}"]`);
+    if (!node) return;
+
+    setDownloadingId(id);
+    const actionBtn = node.querySelector<HTMLElement>("[data-no-capture]");
+    if (actionBtn) actionBtn.style.visibility = "hidden";
+
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(node, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+      });
+      const { jsPDF } = await import("jspdf");
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
+        unit: "px",
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+      pdf.save(`${fileName}.pdf`);
+    } finally {
+      if (actionBtn) actionBtn.style.visibility = "";
+      setDownloadingId(null);
+    }
   }
 
   return (
@@ -183,7 +204,7 @@ export default function BookingsPage() {
               </div>
 
               {b.payment_status === "paid" ? (
-                <div id={`pass-${b.id}`} className="grid gap-6 p-5 sm:grid-cols-[auto_1fr] sm:items-center">
+                <div className="grid gap-6 p-5 sm:grid-cols-[auto_1fr] sm:items-center">
                   <div className="flex justify-center">
                     <img
                       src={qrUrl}
@@ -216,10 +237,14 @@ export default function BookingsPage() {
                       <p className="mt-1">{t.passBringNote}</p>
                     </div>
                     <button
-                      onClick={() => printOne(b.id)}
-                      className="focus-ring mt-2 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm hover:bg-ink/5 print:hidden"
+                      data-no-capture
+                      onClick={() =>
+                        downloadPass(b.id, `ziro-propusk-${b.student?.full_name ?? b.short_code ?? b.id}`)
+                      }
+                      disabled={downloadingId === b.id}
+                      className="focus-ring mt-2 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm hover:bg-ink/5 disabled:opacity-50"
                     >
-                      {t.printSave}
+                      {downloadingId === b.id ? t.loading : t.printSave}
                     </button>
                   </div>
                 </div>
