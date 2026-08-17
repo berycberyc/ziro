@@ -125,6 +125,41 @@ export default function BookingsPage() {
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  async function waitForImages(node: HTMLElement) {
+    const imgs = Array.from(node.querySelectorAll("img"));
+    await Promise.all(
+      imgs.map(
+        (img) =>
+          new Promise<void>((resolve) => {
+            if (img.complete) {
+              if (img.naturalWidth === 0) {
+                img.remove();
+              }
+              resolve();
+              return;
+            }
+            const cleanup = () => {
+              img.removeEventListener("load", onLoad);
+              img.removeEventListener("error", onError);
+              resolve();
+            };
+            const onLoad = () => cleanup();
+            const onError = () => {
+              img.remove();
+              cleanup();
+            };
+            img.addEventListener("load", onLoad);
+            img.addEventListener("error", onError);
+            // Safety timeout in case an image hangs indefinitely.
+            setTimeout(() => {
+              if (img.naturalWidth === 0) img.remove();
+              cleanup();
+            }, 5000);
+          })
+      )
+    );
+  }
+
   async function downloadPass(id: string, fileName: string) {
     const node = document.querySelector<HTMLElement>(`[data-pass-template][data-id="${id}"]`);
     if (!node) return;
@@ -132,6 +167,7 @@ export default function BookingsPage() {
     setDownloadingId(id);
 
     try {
+      await waitForImages(node);
       const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(node, {
         backgroundColor: "#ffffff",
@@ -300,6 +336,7 @@ export default function BookingsPage() {
                       <img
                         src={b.student.photo_url}
                         alt={b.student.full_name}
+                        crossOrigin="anonymous"
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     )}
@@ -318,6 +355,7 @@ export default function BookingsPage() {
                   <img
                     src={qrUrl}
                     alt="QR"
+                    crossOrigin="anonymous"
                     width={210}
                     height={210}
                     style={{ borderRadius: "16px", background: "#fff", padding: "10px", border: "1px solid #15181e1a", marginBottom: "32px" }}
