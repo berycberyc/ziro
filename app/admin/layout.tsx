@@ -10,6 +10,7 @@ const navItems = [
   { href: "/admin/sessions", label: "Сессиялар" },
   { href: "/admin/test-types", label: "Тест түрлері" },
   { href: "/admin/bookings", label: "Бронирование" },
+  { href: "/admin/current-testing", label: "Ағымдағы тестілеу" },
   { href: "/admin/results", label: "Нәтижелер" },
   { href: "/admin/online-test", label: "Онлайн тест" },
   { href: "/admin/zipgrade", label: "ZipGrade" },
