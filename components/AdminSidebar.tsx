@@ -4,8 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: "/admin", label: "Басты бет" },
   { href: "/admin/sessions", label: "Сессиялар" },
+  { href: "/admin/test-types", label: "Тест түрлері" },
+  { href: "/admin/bookings", label: "Бронирование" },
+  { href: "/admin/results", label: "Нәтижелер" },
+  { href: "/admin/online-test", label: "Онлайн тест" },
   { href: "/admin/zipgrade", label: "ZipGrade" },
 ];
 

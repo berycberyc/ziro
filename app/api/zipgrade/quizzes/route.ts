@@ -38,6 +38,18 @@ export async function GET() {
       });
     }
 
+    if (quizzes.length === 0) {
+      return NextResponse.json({
+        quizzes: [],
+        debug: {
+          htmlLength: html.length,
+          htmlSnippet: html.slice(0, 1500),
+          containsLoginForm: html.includes("csrf_token") && html.includes("password"),
+          containsQuizTable: html.includes("quizCheckbox"),
+        },
+      });
+    }
+
     return NextResponse.json({ quizzes });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Unknown error" }, { status: 500 });

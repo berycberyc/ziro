@@ -10,6 +10,15 @@ type Stage = {
   format: "abcd" | "number";
 };
 
+type ExistingTestType = {
+  id: string;
+  code: string;
+  name_kk: string;
+  name_ru: string;
+  stages: { subject: string; questions: number; minutes: number; format: string }[];
+  scoring_scheme: string;
+};
+
 const emptyStage: Stage = { subject: "", questions: "", minutes: "", format: "abcd" };
 
 const scoringOptions = [
@@ -19,12 +28,31 @@ const scoringOptions = [
   { value: "adaptive", label: "Бейімделген (сирек дұрыс — көбірек ұпай) / Адаптивная" },
 ];
 
-export default function CreateTestTypeForm({ onCreated }: { onCreated: () => void }) {
-  const [code, setCode] = useState("");
-  const [nameKk, setNameKk] = useState("");
-  const [nameRu, setNameRu] = useState("");
-  const [scoringScheme, setScoringScheme] = useState("simple");
-  const [stages, setStages] = useState<Stage[]>([{ ...emptyStage }]);
+export default function CreateTestTypeForm({
+  onCreated,
+  editing,
+  onCancelEdit,
+}: {
+  onCreated: () => void;
+  editing?: ExistingTestType | null;
+  onCancelEdit?: () => void;
+}) {
+  const isEditing = !!editing;
+
+  const [code, setCode] = useState(editing?.code ?? "");
+  const [nameKk, setNameKk] = useState(editing?.name_kk ?? "");
+  const [nameRu, setNameRu] = useState(editing?.name_ru ?? "");
+  const [scoringScheme, setScoringScheme] = useState(editing?.scoring_scheme ?? "simple");
+  const [stages, setStages] = useState<Stage[]>(
+    editing
+      ? editing.stages.map((s) => ({
+          subject: s.subject,
+          questions: String(s.questions),
+          minutes: String(s.minutes),
+          format: s.format as "abcd" | "number",
+        }))
+      : [{ ...emptyStage }]
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
@@ -54,13 +82,17 @@ export default function CreateTestTypeForm({ onCreated }: { onCreated: () => voi
       format: s.format,
     }));
 
-    const { error } = await supabase.from("test_types").insert({
+    const payload = {
       code: code.toUpperCase(),
       name_kk: nameKk,
       name_ru: nameRu,
       stages: stagesJson,
       scoring_scheme: scoringScheme,
-    });
+    };
+
+    const { error } = isEditing
+      ? await supabase.from("test_types").update(payload).eq("id", editing!.id)
+      : await supabase.from("test_types").insert(payload);
 
     setLoading(false);
     if (error) {
@@ -68,11 +100,13 @@ export default function CreateTestTypeForm({ onCreated }: { onCreated: () => voi
       return;
     }
 
-    setCode("");
-    setNameKk("");
-    setNameRu("");
-    setScoringScheme("simple");
-    setStages([{ ...emptyStage }]);
+    if (!isEditing) {
+      setCode("");
+      setNameKk("");
+      setNameRu("");
+      setScoringScheme("simple");
+      setStages([{ ...emptyStage }]);
+    }
     onCreated();
   }
 
@@ -182,13 +216,24 @@ export default function CreateTestTypeForm({ onCreated }: { onCreated: () => voi
 
       {error && <p className="text-sm text-red-600">Қате шықты, қайта көріңіз.</p>}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="focus-ring self-start rounded-full bg-admin px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-      >
-        Тест түрін құру
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={loading}
+          className="focus-ring self-start rounded-full bg-admin px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {isEditing ? "Сақтау" : "Тест түрін құру"}
+        </button>
+        {isEditing && onCancelEdit && (
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="focus-ring self-start rounded-full border border-ink/15 px-6 py-2.5 text-sm font-semibold text-ink hover:bg-parchment"
+          >
+            Бас тарту
+          </button>
+        )}
+      </div>
     </form>
   );
 }

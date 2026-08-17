@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 
@@ -19,6 +19,12 @@ type SessionInfo = {
   id: string;
   title_kk: string;
   title_ru: string;
+  session_date: string;
+  start_time: string | null;
+  address: string | null;
+  price: number;
+  registration_opens_at: string | null;
+  registration_closes_at: string | null;
   is_active: boolean;
   is_checking: boolean;
   has_results: boolean;
@@ -26,20 +32,27 @@ type SessionInfo = {
 
 export default function AdminSessionDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const sessionId = params.id as string;
 
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [importMessage, setImportMessage] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Partial<SessionInfo>>({});
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const load = useCallback(async () => {
     const { data: sessionData } = await supabase
       .from("test_sessions")
-      .select("id, title_kk, title_ru, is_active, is_checking, has_results")
+      .select(
+        "id, title_kk, title_ru, session_date, start_time, address, price, registration_opens_at, registration_closes_at, is_active, is_checking, has_results"
+      )
       .eq("id", sessionId)
       .single();
     setSession(sessionData);
+    if (sessionData) setForm(sessionData);
 
     const { data: regs } = await supabase
       .from("registrations")
@@ -63,6 +76,27 @@ export default function AdminSessionDetailPage() {
   async function updateSessionField(field: string, value: boolean) {
     await supabase.from("test_sessions").update({ [field]: value }).eq("id", sessionId);
     load();
+  }
+
+  async function handleSaveEdit() {
+    await supabase
+      .from("test_sessions")
+      .update({
+        title_kk: form.title_kk,
+        title_ru: form.title_ru,
+        session_date: form.session_date,
+        start_time: form.start_time || null,
+        address: form.address || null,
+        price: Number(form.price),
+      })
+      .eq("id", sessionId);
+    setEditing(false);
+    load();
+  }
+
+  async function handleDeleteSession() {
+    await supabase.from("test_sessions").delete().eq("id", sessionId);
+    router.push("/admin/sessions");
   }
 
   async function markPaid(regId: string) {
@@ -132,9 +166,95 @@ export default function AdminSessionDetailPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-admin">
-        {session.title_kk} / {session.title_ru}
-      </h1>
+      <div className="flex items-start justify-between">
+        <h1 className="font-display text-2xl font-bold text-admin">
+          {session.title_kk} / {session.title_ru}
+        </h1>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setEditing((v) => !v)}
+            className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-sm font-semibold text-ink hover:bg-parchment"
+          >
+            {editing ? "Жабу" : "Өзгерту"}
+          </button>
+          <button
+            onClick={() => setConfirmingDelete(true)}
+            className="focus-ring rounded-full border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+          >
+            Өшіру
+          </button>
+        </div>
+      </div>
+
+      {confirmingDelete && (
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3">
+          <span className="text-sm text-red-700">
+            Сессияны өшіру керек пе? Барлық брондаулар да жойылады. Бұл әрекетті қайтару мүмкін емес.
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDeleteSession}
+              className="focus-ring rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+            >
+              Иә, өшіру
+            </button>
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              className="focus-ring rounded-full border border-ink/15 px-4 py-1.5 text-xs font-semibold text-ink hover:bg-white"
+            >
+              Бас тарту
+            </button>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <div className="mt-4 grid gap-3 rounded-2xl border border-ink/10 bg-white p-5 sm:grid-cols-2">
+          <input
+            className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            placeholder="Атауы (қазақша)"
+            value={form.title_kk ?? ""}
+            onChange={(e) => setForm({ ...form, title_kk: e.target.value })}
+          />
+          <input
+            className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            placeholder="Название (русский)"
+            value={form.title_ru ?? ""}
+            onChange={(e) => setForm({ ...form, title_ru: e.target.value })}
+          />
+          <input
+            type="date"
+            className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            value={form.session_date ?? ""}
+            onChange={(e) => setForm({ ...form, session_date: e.target.value })}
+          />
+          <input
+            type="time"
+            className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            value={form.start_time ?? ""}
+            onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+          />
+          <input
+            className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm sm:col-span-2"
+            placeholder="Мекенжайы"
+            value={form.address ?? ""}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
+          <input
+            type="number"
+            className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            placeholder="Баға"
+            value={form.price ?? ""}
+            onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+          />
+          <button
+            onClick={handleSaveEdit}
+            className="focus-ring self-start rounded-full bg-admin px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2"
+          >
+            Сақтау
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button
