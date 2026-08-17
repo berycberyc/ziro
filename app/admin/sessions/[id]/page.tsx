@@ -10,6 +10,7 @@ type Registration = {
   format: string;
   payment_status: string;
   classroom: string | null;
+  seat: string | null;
   test_variant: string | null;
   students: { full_name: string; iin: string | null; language: string | null } | null;
   test_types: { name_kk: string; name_ru: string } | null;
@@ -58,7 +59,7 @@ export default function AdminSessionDetailPage() {
       .from("registrations")
       .select(
         `
-        id, format, payment_status, classroom, test_variant,
+        id, format, payment_status, classroom, seat, test_variant,
         students ( full_name, iin, language ),
         test_types ( name_kk, name_ru )
         `
@@ -120,6 +121,7 @@ export default function AdminSessionDetailPage() {
       "Язык": r.students?.language ?? "",
       "ИИН": r.students?.iin ?? "",
       "Аудитория": r.classroom ?? "",
+      "Орын": r.seat ?? "",
       "Вариант": r.test_variant ?? "",
     }));
 
@@ -143,12 +145,14 @@ export default function AdminSessionDetailPage() {
     for (const row of rows) {
       const id = row["ID"];
       const classroom = row["Аудитория"];
+      const seat = row["Орын"];
       const variant = row["Вариант"];
       if (!id) continue;
       const { error } = await supabase
         .from("registrations")
         .update({
           classroom: classroom != null ? String(classroom) : null,
+          seat: seat != null ? String(seat) : null,
           test_variant: variant != null ? String(variant) : null,
         })
         .eq("id", id);
@@ -291,7 +295,7 @@ export default function AdminSessionDetailPage() {
           Excel-ге жүктеу
         </button>
         <label className="focus-ring cursor-pointer rounded-full border border-admin px-5 py-2.5 text-sm font-semibold text-admin hover:bg-admin-soft">
-          Excel-ден жүктеу (аудитория/вариант)
+          Excel-ден жүктеу (аудитория/орын/вариант)
           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
         </label>
       </div>
@@ -309,6 +313,7 @@ export default function AdminSessionDetailPage() {
                 <th className="py-2 pr-4">Тест түрі</th>
                 <th className="py-2 pr-4">Формат</th>
                 <th className="py-2 pr-4">Аудитория</th>
+                <th className="py-2 pr-4">Орын</th>
                 <th className="py-2 pr-4">Нұсқа</th>
                 <th className="py-2 pr-4">Төлем</th>
               </tr>
@@ -320,6 +325,7 @@ export default function AdminSessionDetailPage() {
                   <td className="py-2 pr-4">{r.test_types?.name_kk}</td>
                   <td className="py-2 pr-4">{r.format}</td>
                   <td className="py-2 pr-4">{r.classroom ?? "—"}</td>
+                  <td className="py-2 pr-4">{r.seat ?? "—"}</td>
                   <td className="py-2 pr-4">{r.test_variant ?? "—"}</td>
                   <td className="py-2 pr-4">
                     {r.payment_status === "paid" ? (
