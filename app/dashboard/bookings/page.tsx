@@ -296,7 +296,7 @@ export default function BookingsPage() {
                   data-id={b.id}
                   style={{
                     position: "fixed",
-                    left: "-10000px",
+                    left: "-3000px",
                     top: 0,
                     width: "800px",
                     height: "1131px",
