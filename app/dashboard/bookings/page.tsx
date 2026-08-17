@@ -16,7 +16,7 @@ type Registration = {
   test_session_id: string;
 };
 
-type StudentInfo = { id: string; full_name: string; photo_url: string | null };
+type StudentInfo = { id: string; full_name: string; photo_url: string | null; zipgrade_id: string | null };
 type TestTypeInfo = { id: string; name_kk: string; name_ru: string };
 type SessionInfo = {
   id: string;
@@ -80,7 +80,7 @@ export default function BookingsPage() {
       const sessionIds = [...new Set(registrations.map((r) => r.test_session_id))];
 
       const [studentsRes, testTypesRes, sessionsRes] = await Promise.all([
-        supabase.from("students").select("id, full_name, photo_url").in("id", studentIds),
+        supabase.from("students").select("id, full_name, photo_url, zipgrade_id").in("id", studentIds),
         supabase.from("test_types").select("id, name_kk, name_ru").in("id", testTypeIds),
         supabase
           .from("test_sessions")
@@ -126,12 +126,10 @@ export default function BookingsPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   async function downloadPass(id: string, fileName: string) {
-    const node = document.querySelector<HTMLElement>(`[data-pass-card][data-id="${id}"]`);
+    const node = document.querySelector<HTMLElement>(`[data-pass-template][data-id="${id}"]`);
     if (!node) return;
 
     setDownloadingId(id);
-    const actionBtn = node.querySelector<HTMLElement>("[data-no-capture]");
-    if (actionBtn) actionBtn.style.visibility = "hidden";
 
     try {
       const { default: html2canvas } = await import("html2canvas");
@@ -143,14 +141,13 @@ export default function BookingsPage() {
       const { jsPDF } = await import("jspdf");
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({
-        orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
+        orientation: "portrait",
         unit: "px",
         format: [canvas.width, canvas.height],
       });
       pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
       pdf.save(`${fileName}.pdf`);
     } finally {
-      if (actionBtn) actionBtn.style.visibility = "";
       setDownloadingId(null);
     }
   }
@@ -237,7 +234,6 @@ export default function BookingsPage() {
                       <p className="mt-1">{t.passBringNote}</p>
                     </div>
                     <button
-                      data-no-capture
                       onClick={() =>
                         downloadPass(b.id, `ziro-propusk-${b.student?.full_name ?? b.short_code ?? b.id}`)
                       }
@@ -256,6 +252,110 @@ export default function BookingsPage() {
                 <p className="border-t border-ink/10 px-5 py-3 text-sm font-semibold text-parent">
                   {t.resultsReady}
                 </p>
+              )}
+
+              {b.payment_status === "paid" && (
+                <div
+                  data-pass-template
+                  data-id={b.id}
+                  style={{
+                    position: "fixed",
+                    left: "-10000px",
+                    top: 0,
+                    width: "800px",
+                    height: "1131px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    background: "#ffffff",
+                    padding: "56px 64px",
+                    boxSizing: "border-box",
+                    fontFamily: "var(--font-body)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "36px" }}>
+                    <img src="/logo.jpg" alt="Ziro" style={{ width: "44px", height: "44px", borderRadius: "10px", objectFit: "cover" }} />
+                    <span style={{ fontSize: "22px", fontWeight: 800, color: "#151A2E", letterSpacing: "-0.02em" }}>
+                      Ziro
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: "13px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#B48A2E", margin: "0 0 28px 0", fontWeight: 700 }}>
+                    {t.passLabel}
+                  </p>
+
+                  <div
+                    style={{
+                      width: "220px",
+                      height: "280px",
+                      borderRadius: "16px",
+                      overflow: "hidden",
+                      border: "4px solid #F6F4EE",
+                      boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+                      background: "#d9d9d9",
+                      marginBottom: "28px",
+                    }}
+                  >
+                    {b.student?.photo_url && (
+                      <img
+                        src={b.student.photo_url}
+                        alt={b.student.full_name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    )}
+                  </div>
+
+                  <p style={{ fontSize: "30px", fontWeight: 800, color: "#151A2E", margin: "0 0 8px 0", textAlign: "center" }}>
+                    {b.student?.full_name}
+                  </p>
+                  <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 32px 0", textAlign: "center" }}>
+                    {t.studentIdLabel}:{" "}
+                    <span style={{ fontWeight: 700, color: "#151A2E" }}>
+                      {b.student?.zipgrade_id ?? "—"}
+                    </span>
+                  </p>
+
+                  <img
+                    src={qrUrl}
+                    alt="QR"
+                    width={210}
+                    height={210}
+                    style={{ borderRadius: "16px", background: "#fff", padding: "10px", border: "1px solid #15181e1a", marginBottom: "32px" }}
+                  />
+
+                  <div style={{ width: "100%", height: "1px", background: "linear-gradient(to right, transparent, #D6A83A55, transparent)", marginBottom: "28px" }} />
+
+                  <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
+                      <span style={{ color: "#8a8a8a" }}>{t.testTypeLabel}</span>
+                      <span style={{ fontWeight: 700, color: "#151A2E" }}>{testTypeName}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
+                      <span style={{ color: "#8a8a8a" }}>{t.sessionLabel}</span>
+                      <span style={{ fontWeight: 700, color: "#151A2E", textAlign: "right" }}>{sessionTitle}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
+                      <span style={{ color: "#8a8a8a" }}>
+                        {t.dateLabel} / {t.timeLabel}
+                      </span>
+                      <span style={{ fontWeight: 700, color: "#151A2E" }}>
+                        {b.session?.session_date}
+                        {b.session?.start_time ? `, ${b.session.start_time}` : ""}
+                      </span>
+                    </div>
+                    {b.session?.address && (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
+                        <span style={{ color: "#8a8a8a" }}>{t.addressLabel}</span>
+                        <span style={{ fontWeight: 700, color: "#151A2E", textAlign: "right" }}>{b.session.address}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: "32px", width: "100%", padding: "18px 22px", background: "#F6F4EE", borderRadius: "14px", fontSize: "13.5px", lineHeight: 1.7, color: "#5a5a5a" }}>
+                    <p style={{ margin: 0 }}>{t.passArriveNote}</p>
+                    <p style={{ margin: "6px 0 0 0" }}>{t.passBringNote}</p>
+                  </div>
+                </div>
               )}
             </div>
           );

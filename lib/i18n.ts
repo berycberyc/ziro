@@ -86,6 +86,9 @@ export const dict = {
     resultsReady: "Нәтиже дайын — жақын арада осында көрсетіледі.",
     printSave: "Жүктеп алу (PDF)",
     passWaitingPayment: "Төлем расталғаннан кейін пропуск осында пайда болады.",
+    passLabel: "Рұқсат қағазы",
+    studentIdLabel: "Оқушы ID",
+    sessionLabel: "Сессия",
 
     // Admin
     adminNoAccess: "Бұл бетке қол жеткізу құқығыңыз жоқ.",
@@ -195,6 +198,9 @@ export const dict = {
     resultsReady: "Результат готов — скоро появится здесь.",
     printSave: "Скачать (PDF)",
     passWaitingPayment: "Пропуск появится здесь после подтверждения оплаты.",
+    passLabel: "Пропуск",
+    studentIdLabel: "ID ученика",
+    sessionLabel: "Сессия",
 
     // Admin
     adminNoAccess: "У вас нет доступа к этой странице.",
