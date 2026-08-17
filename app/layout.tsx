@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, Inter } from "next/font/google";
+import { LangProvider } from "@/lib/LangContext";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -27,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="kk">
       <body className={`${manrope.variable} ${inter.variable} font-body`}>
-        {children}
+        <LangProvider>{children}</LangProvider>
       </body>
     </html>
   );

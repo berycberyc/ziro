@@ -28,6 +28,71 @@ export const dict = {
     authError: "Қате шықты. Деректерді тексеріп, қайта көріңіз.",
     noSessions: "Әзірге жоспарланған байқаулар жоқ.",
     formatNote: "Онлайн немесе офлайн — броньдау кезінде таңдайсыз",
+
+    // Shared
+    loading: "Жүктелуде...",
+    logout: "Шығу",
+    save: "Сақтау",
+    saved: "Сақталды",
+    add: "Қосу",
+    errorGeneric: "Қате шықты, қайта көріңіз.",
+
+    // Parent sidebar
+    navProfile: "Профиль",
+    navStudents: "Оқушы",
+    navTests: "Тесттер",
+    navBookings: "Брондарым",
+
+    // Profile page
+    profileTitle: "Профиль",
+    newPasswordLabel: "Жаңа құпия сөз (өзгертпесеңіз бос қалдырыңыз)",
+
+    // Students page
+    studentsTitle: "Оқушы",
+    myChildrenTitle: "Балаларым",
+    noChildren: "Әзірге бала қосылмаған.",
+    addChildTitle: "Жаңа бала қосу",
+    gradePlaceholder: "Сынып",
+    schoolPlaceholder: "Мектеп",
+    iinPlaceholder: "ИИН",
+    langKk: "Қазақша",
+    langRu: "Орысша",
+    photoLabel: "Оқушының фотосуреті",
+    photoNote:
+      "Фото ақ фонда, тура қарап тұрған түрде түсірілуі керек. Максималды өлшемі — 5МБ.",
+    photoTooLarge: "Файл тым үлкен (максимум 5МБ).",
+    photoInvalidType: "Тек сурет файлын (JPG, PNG) жүктеуге болады.",
+
+    // Tests page
+    testsPageTitle: "Тесттер",
+    noAvailableTests: "Әзірге қолжетімді тест жоқ.",
+    bookedMessage:
+      'Брондалды! Төлем растаудан кейін пропускты "Брондарым" бөлімінен көресіз.',
+
+    // Bookings / pass
+    bookingsTitle: "Брондарым",
+    noBookings: "Әзірге брондау жоқ.",
+    statusPaid: "Төленді",
+    statusPending: "Төлем күтілуде",
+    testTypeLabel: "Тест түрі",
+    dateLabel: "Күні",
+    timeLabel: "Уақыты",
+    addressLabel: "Мекенжай",
+    roomLabel: "Аудитория",
+    passArriveNote:
+      "Тестке кемінде 15 минут бұрын келуіңізді сұраймыз. Тіркеу тест басталуына 10 минут қалғанда жабылады.",
+    passBringNote:
+      "Өзіңізбен бірге осы пропускты, туу туралы куәлікті және көк немесе қара сиялы қалам алып келіңіз.",
+    resultsReady: "Нәтиже дайын — жақын арада осында көрсетіледі.",
+
+    // Admin
+    adminNoAccess: "Бұл бетке қол жеткізу құқығыңыз жоқ.",
+
+    // Teacher
+    teacherNoAccess: "Бұл бетке қол жеткізу құқығыңыз жоқ.",
+    navScan: "Пропускты сканерлеу",
+    teacherScanTitle: "Пропускты сканерлеу",
+    teacherScanPlaceholder: "Бұл бөлім әзірленуде.",
   },
   ru: {
     tagline: "Портал регистрации на пробные тесты",
@@ -56,5 +121,70 @@ export const dict = {
     authError: "Произошла ошибка. Проверьте данные и попробуйте снова.",
     noSessions: "Пока нет запланированных тестов.",
     formatNote: "Онлайн или офлайн — выбирается при бронировании",
+
+    // Shared
+    loading: "Загрузка...",
+    logout: "Выйти",
+    save: "Сохранить",
+    saved: "Сохранено",
+    add: "Добавить",
+    errorGeneric: "Произошла ошибка, попробуйте снова.",
+
+    // Parent sidebar
+    navProfile: "Профиль",
+    navStudents: "Ученик",
+    navTests: "Тесты",
+    navBookings: "Мои брони",
+
+    // Profile page
+    profileTitle: "Профиль",
+    newPasswordLabel: "Новый пароль (оставьте пустым, если не меняете)",
+
+    // Students page
+    studentsTitle: "Ученик",
+    myChildrenTitle: "Мои дети",
+    noChildren: "Пока нет добавленных детей.",
+    addChildTitle: "Добавить ребёнка",
+    gradePlaceholder: "Класс",
+    schoolPlaceholder: "Школа",
+    iinPlaceholder: "ИИН",
+    langKk: "Казахский",
+    langRu: "Русский",
+    photoLabel: "Фото ученика",
+    photoNote:
+      "Фото должно быть на белом фоне, лицо строго анфас. Максимальный размер — 5МБ.",
+    photoTooLarge: "Файл слишком большой (максимум 5МБ).",
+    photoInvalidType: "Можно загружать только изображения (JPG, PNG).",
+
+    // Tests page
+    testsPageTitle: "Тесты",
+    noAvailableTests: "Пока нет доступных тестов.",
+    bookedMessage:
+      'Забронировано! После подтверждения оплаты пропуск появится в разделе "Мои брони".',
+
+    // Bookings / pass
+    bookingsTitle: "Мои брони",
+    noBookings: "Пока нет бронирований.",
+    statusPaid: "Оплачено",
+    statusPending: "Ожидает оплаты",
+    testTypeLabel: "Тип теста",
+    dateLabel: "Дата",
+    timeLabel: "Время",
+    addressLabel: "Адрес",
+    roomLabel: "Аудитория",
+    passArriveNote:
+      "Пожалуйста, приходите минимум за 15 минут до начала теста. Регистрация закрывается за 10 минут до начала.",
+    passBringNote:
+      "Возьмите с собой этот пропуск, свидетельство о рождении и синюю или чёрную ручку.",
+    resultsReady: "Результат готов — скоро появится здесь.",
+
+    // Admin
+    adminNoAccess: "У вас нет доступа к этой странице.",
+
+    // Teacher
+    teacherNoAccess: "У вас нет доступа к этой странице.",
+    navScan: "Сканирование пропуска",
+    teacherScanTitle: "Сканирование пропуска",
+    teacherScanPlaceholder: "Этот раздел находится в разработке.",
   },
 } as const;

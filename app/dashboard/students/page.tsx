@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useLang } from "@/lib/LangContext";
 import AddStudentForm from "@/components/AddStudentForm";
 import StudentList from "@/components/StudentList";
 
@@ -10,16 +11,18 @@ type Student = {
   full_name: string;
   grade: string | null;
   school: string | null;
+  photo_url: string | null;
 };
 
 export default function StudentsPage() {
+  const { t } = useLang();
   const [userId, setUserId] = useState<string | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
 
   const loadStudents = useCallback(async (parentId: string) => {
     const { data } = await supabase
       .from("students")
-      .select("id, full_name, grade, school")
+      .select("id, full_name, grade, school, photo_url")
       .eq("parent_id", parentId)
       .order("created_at", { ascending: false });
     setStudents(data ?? []);
@@ -36,17 +39,17 @@ export default function StudentsPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-ink">Ученик</h1>
+      <h1 className="font-display text-2xl font-bold text-ink">{t.studentsTitle}</h1>
 
       <section className="mt-6">
-        <h2 className="font-display text-lg font-bold text-ink">Балаларым</h2>
+        <h2 className="font-display text-lg font-bold text-ink">{t.myChildrenTitle}</h2>
         <div className="mt-4">
           <StudentList students={students} />
         </div>
       </section>
 
       <section className="mt-8">
-        <h2 className="font-display text-lg font-bold text-ink">Жаңа бала қосу</h2>
+        <h2 className="font-display text-lg font-bold text-ink">{t.addChildTitle}</h2>
         <div className="mt-4">
           {userId && (
             <AddStudentForm parentId={userId} onAdded={() => loadStudents(userId)} />

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useLang } from "@/lib/LangContext";
 
 export default function ProfilePage() {
+  const { t } = useLang();
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -47,17 +49,17 @@ export default function ProfilePage() {
     }
 
     setLoading(false);
-    setSavedMessage("Сақталды");
+    setSavedMessage(t.saved);
     setTimeout(() => setSavedMessage(""), 3000);
   }
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-ink">Профиль</h1>
+      <h1 className="font-display text-2xl font-bold text-ink">{t.profileTitle}</h1>
 
-      <form onSubmit={handleSave} className="mt-6 max-w-md flex flex-col gap-4">
+      <form onSubmit={handleSave} className="mt-6 flex max-w-md flex-col gap-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-ink/70">Аты-жөні</label>
+          <label className="mb-1 block text-sm font-medium text-ink/70">{t.fullName}</label>
           <input
             className="focus-ring w-full rounded-xl border border-ink/15 bg-white px-4 py-2.5 text-sm"
             value={fullName}
@@ -65,7 +67,7 @@ export default function ProfilePage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-ink/70">Телефон</label>
+          <label className="mb-1 block text-sm font-medium text-ink/70">{t.phone}</label>
           <input
             className="focus-ring w-full rounded-xl border border-ink/15 bg-white px-4 py-2.5 text-sm"
             value={phone}
@@ -74,7 +76,7 @@ export default function ProfilePage() {
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-ink/70">
-            Жаңа құпия сөз (өзгертпесеңіз бос қалдырыңыз)
+            {t.newPasswordLabel}
           </label>
           <input
             type="password"
@@ -91,7 +93,7 @@ export default function ProfilePage() {
           disabled={loading}
           className="focus-ring self-start rounded-full bg-parent px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
-          Сақтау
+          {t.save}
         </button>
       </form>
     </div>
