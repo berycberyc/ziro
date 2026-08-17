@@ -43,6 +43,7 @@ export default function TeacherScanSessionPage() {
 
   const scannerRef = useRef<any>(null);
   const busyRef = useRef(false);
+  const handleDecodedRef = useRef<(text: string) => void>(() => {});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,24 +140,40 @@ export default function TeacherScanSessionPage() {
     [rows, checkIn]
   );
 
-  // Camera scanner lifecycle
+  // Keep the ref pointed at the latest handler without re-running the camera effect.
+  useEffect(() => {
+    handleDecodedRef.current = handleDecoded;
+  });
+
+  // Camera scanner lifecycle — starts once and is not restarted on every scan.
   useEffect(() => {
     let cancelled = false;
+    let started = false;
+    let scanner: any = null;
 
     async function start() {
+      if (manualOpen) return;
       const { Html5Qrcode } = await import("html5-qrcode");
       if (cancelled) return;
-      const scanner = new Html5Qrcode("qr-reader");
+      scanner = new Html5Qrcode("qr-reader");
       scannerRef.current = scanner;
       try {
         await scanner.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: 260 },
           (decodedText: string) => {
-            handleDecoded(decodedText.trim());
+            handleDecodedRef.current(decodedText.trim());
           },
           () => {}
         );
+        started = true;
+        if (cancelled) {
+          try {
+            await scanner.stop();
+          } catch {
+            // ignore — already stopping/stopped
+          }
+        }
       } catch {
         // camera unavailable — manual search fallback remains available
       }
@@ -166,12 +183,15 @@ export default function TeacherScanSessionPage() {
 
     return () => {
       cancelled = true;
-      const scanner = scannerRef.current;
-      if (scanner) {
-        scanner.stop().catch(() => {});
+      if (started && scanner) {
+        try {
+          scanner.stop().catch(() => {});
+        } catch {
+          // scanner was already stopped/not running — safe to ignore
+        }
       }
     };
-  }, [handleDecoded]);
+  }, [sessionId, manualOpen]);
 
   const manualResults = rows.filter((r) =>
     r.student?.full_name.toLowerCase().includes(manualQuery.toLowerCase()) ||
