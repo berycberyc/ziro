@@ -10,7 +10,7 @@ export type QuestionItem = {
   answerParas: { xml: string; correct: boolean }[];
 };
 
-const QUESTION_MARKER = /^ziroquestion\s+([a-z]+)\s*(\d+)/i;
+const QUESTION_MARKER = /^zi(?:ro|p)question\s+([a-z]+)\s*(\d+)/i;
 const ANSWER_MARKER = /^ziroanswer/i;
 const TRUE_MARKER = /zirotrue/i;
 
