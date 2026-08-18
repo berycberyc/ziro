@@ -72,11 +72,14 @@ export async function POST(req: NextRequest) {
     const zipBuffer = await outputZip.generateAsync({ type: "nodebuffer" });
     const zipBytes = new Uint8Array(zipBuffer);
 
+    const safeName = nameWord || "variants";
+    const encodedName = encodeURIComponent(`${safeName}.zip`);
+
     return new NextResponse(zipBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${nameWord || "variants"}.zip"`,
+        "Content-Disposition": `attachment; filename="variants.zip"; filename*=UTF-8''${encodedName}`,
       },
     });
   } catch (err: any) {
