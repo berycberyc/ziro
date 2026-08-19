@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
 
@@ -17,7 +18,7 @@ type Registration = {
 };
 
 type StudentInfo = { id: string; full_name: string; photo_url: string | null; zipgrade_id: string | null };
-type TestTypeInfo = { id: string; name_kk: string; name_ru: string };
+type TestTypeInfo = { id: string; code: string; name_kk: string; name_ru: string };
 type SessionInfo = {
   id: string;
   title_kk: string;
@@ -26,6 +27,7 @@ type SessionInfo = {
   start_time: string | null;
   address: string | null;
   has_results: boolean;
+  is_checking: boolean;
 };
 
 type Booking = Registration & {
@@ -81,10 +83,10 @@ export default function BookingsPage() {
 
       const [studentsRes, testTypesRes, sessionsRes] = await Promise.all([
         supabase.from("students").select("id, full_name, photo_url, zipgrade_id").in("id", studentIds),
-        supabase.from("test_types").select("id, name_kk, name_ru").in("id", testTypeIds),
+        supabase.from("test_types").select("id, code, name_kk, name_ru").in("id", testTypeIds),
         supabase
           .from("test_sessions")
-          .select("id, title_kk, title_ru, session_date, start_time, address, has_results")
+          .select("id, title_kk, title_ru, session_date, start_time, address, has_results, is_checking")
           .in("id", sessionIds),
       ]);
 
@@ -289,6 +291,20 @@ export default function BookingsPage() {
                   {t.resultsReady}
                 </p>
               )}
+
+              {b.format === "online" &&
+                b.payment_status === "paid" &&
+                b.session?.is_checking &&
+                !b.session?.has_results && (
+                  <div className="border-t border-ink/10 px-5 py-4">
+                    <Link
+                      href={`/dashboard/online-test/${b.id}`}
+                      className="focus-ring inline-flex items-center gap-2 rounded-full bg-teacher px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+                    >
+                      {t.startOnlineTest}
+                    </Link>
+                  </div>
+                )}
 
               {b.payment_status === "paid" && (
                 <div
