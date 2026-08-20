@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
 import { blocksForTestTypeCode, type StageBlock } from "@/lib/onlineTest/blocks";
 import { shuffleForVariant, type BankItem } from "@/lib/onlineTest/shuffleOnline";
+import MathText from "@/components/MathText";
 
 type Attempt = {
   id: string;
@@ -398,7 +399,7 @@ export default function OnlineTestPage() {
         {currentItems.map((item, index) => (
           <div key={item.id} className="rounded-2xl border border-ink/10 bg-white p-5">
             <p className="font-medium text-ink">
-              {index + 1}. {lang === "kk" ? item.text_kk : item.text_ru ?? item.text_kk}
+              {index + 1}. <MathText text={(lang === "kk" ? item.text_kk : item.text_ru ?? item.text_kk) ?? ""} />
             </p>
             {item.image_svg && (
               <div
@@ -428,7 +429,7 @@ export default function OnlineTestPage() {
                           : "border-ink/15 hover:bg-parchment"
                       }`}
                     >
-                      {letter}) {choice.text}
+                      {letter}) <MathText text={choice.text} />
                     </button>
                   );
                 })}

@@ -1,4 +1,5 @@
-import { Document, Packer, Paragraph, TextRun, ImageRun } from "docx";
+import { Document, Packer, Paragraph, TextRun, ImageRun, type ParagraphChild } from "docx";
+import katex from "katex";
 
 export type BankChoice = { text: string; correct: boolean };
 export type BankItem = {
@@ -14,6 +15,67 @@ export type BankItem = {
 export type VariantSlot = { question_number: number; choice_order: number[] };
 
 const LETTERS = "ABCDEF";
+
+/**
+ * Renders a $...$ LaTeX formula to a small PNG image via KaTeX + html2canvas
+ * — the same two libraries already proven to work reliably elsewhere in
+ * this project (on-screen formula display and the pass PDF export). Native
+ * Word equations (OMML) were tried first but couldn't be verified to
+ * render reliably, so formulas are embedded as images instead — not
+ * editable inside Word, but guaranteed to actually be visible.
+ */
+async function latexToInlinePng(latex: string): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-3000px";
+  container.style.top = "0";
+  container.style.background = "#ffffff";
+  container.style.padding = "2px 4px";
+  container.style.fontSize = "20px";
+  container.innerHTML = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+  document.body.appendChild(container);
+
+  try {
+    const { default: html2canvas } = await import("html2canvas");
+    const canvas = await html2canvas(container, { backgroundColor: "#ffffff", scale: 3 });
+    const pngBlob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("canvas.toBlob failed"))), "image/png");
+    });
+    const arrayBuffer = await pngBlob.arrayBuffer();
+    // Scale back down to a reasonable on-page size (canvas is 3x for crispness).
+    const width = Math.max(1, Math.round(canvas.width / 3));
+    const height = Math.max(1, Math.round(canvas.height / 3));
+    return { bytes: new Uint8Array(arrayBuffer), width, height };
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+/** Splits text on $...$ segments into a mix of plain TextRuns and inline
+ * formula images. Text without any $ delimiters is returned completely
+ * unchanged (just a single TextRun), so existing content is unaffected. */
+async function textToParagraphChildren(
+  text: string,
+  opts?: { prefix?: string; boldPrefix?: boolean }
+): Promise<ParagraphChild[]> {
+  const children: ParagraphChild[] = [];
+  if (opts?.prefix) children.push(new TextRun({ text: opts.prefix, bold: opts.boldPrefix }));
+
+  const parts = text.split(/(\$[^$]+\$)/g);
+  for (const part of parts) {
+    if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
+      try {
+        const { bytes, width, height } = await latexToInlinePng(part.slice(1, -1));
+        children.push(new ImageRun({ type: "png", data: bytes, transformation: { width, height } }));
+      } catch {
+        children.push(new TextRun({ text: part })); // fall back to raw text if rendering fails
+      }
+    } else if (part.length > 0) {
+      children.push(new TextRun({ text: part }));
+    }
+  }
+  return children;
+}
 
 /** Converts an inline SVG string to a PNG fallback (via canvas) — runs in
  * the browser only. Reads width/height from the SVG's own viewBox so the
@@ -39,7 +101,7 @@ async function svgToDocxImageData(
       img.src = url;
     });
 
-    const scale = 2; // render the fallback at 2x for reasonable quality too
+    const scale = 2;
     const canvas = document.createElement("canvas");
     canvas.width = width * scale;
     canvas.height = height * scale;
@@ -92,7 +154,7 @@ export async function buildVariantDocxBlob(opts: {
     const questionText = (lang === "kk" ? item.text_kk : item.text_ru) ?? "";
     children.push(
       new Paragraph({
-        children: [new TextRun({ text: `${qNum}. `, bold: true }), new TextRun({ text: questionText })],
+        children: await textToParagraphChildren(questionText, { prefix: `${qNum}. `, boldPrefix: true }),
       })
     );
 
@@ -122,12 +184,17 @@ export async function buildVariantDocxBlob(opts: {
       const correctText = item.choices?.[0]?.text ?? "";
       answerKey.push(`${qNum}-${correctText}`);
     } else {
-      slot.choice_order.forEach((origIdx, ci) => {
+      for (let ci = 0; ci < slot.choice_order.length; ci++) {
+        const origIdx = slot.choice_order[ci];
         const choice = item.choices[origIdx];
         const letter = LETTERS[ci] ?? "?";
-        children.push(new Paragraph({ text: `${letter}) ${choice?.text ?? ""}` }));
+        children.push(
+          new Paragraph({
+            children: await textToParagraphChildren(choice?.text ?? "", { prefix: `${letter}) ` }),
+          })
+        );
         if (choice?.correct) answerKey.push(`${qNum}-${letter}`);
-      });
+      }
     }
 
     children.push(new Paragraph({ text: "" }));
