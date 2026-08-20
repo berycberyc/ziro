@@ -5,17 +5,17 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import JSZip from "jszip";
 import { supabase } from "@/lib/supabase";
-import { buildVariantDocxBlob, type BankItem, type VariantSlot } from "@/lib/questionBank/buildVariantDocx";
+import { buildVariantDocxBlob, type BankItem } from "@/lib/questionBank/buildVariantDocx";
 
 type TestInfo = { id: string; code: string; title: string; profile_id: string; status: string };
+type BankItemWithVariant = BankItem & { variant_number: number };
 
 export default function QuestionBankTestPage() {
   const params = useParams();
   const testId = params.testId as string;
 
   const [test, setTest] = useState<TestInfo | null>(null);
-  const [items, setItems] = useState<BankItem[]>([]);
-  const [hasVariants, setHasVariants] = useState(false);
+  const [items, setItems] = useState<BankItemWithVariant[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
@@ -31,23 +31,22 @@ export default function QuestionBankTestPage() {
 
       const { data: its } = await supabase
         .from("question_bank_items")
-        .select("id, question_number, text_kk, text_ru, answer_format, choices, image_svg")
+        .select("id, question_number, text_kk, text_ru, answer_format, choices, image_svg, variant_number")
         .eq("test_id", testId)
+        .order("variant_number")
         .order("question_number");
-      setItems(its ?? []);
-
-      const { data: vs } = await supabase
-        .from("question_bank_variant_sets")
-        .select("id")
-        .eq("test_id", testId)
-        .limit(1)
-        .maybeSingle();
-      setHasVariants(!!vs);
+      setItems((its ?? []) as BankItemWithVariant[]);
 
       setLoading(false);
     }
     load();
   }, [testId]);
+
+  const variantCounts = [1, 2, 3, 4].map((v) => ({
+    variant: v,
+    count: items.filter((it) => it.variant_number === v).length,
+  }));
+  const allVariantsReady = variantCounts.every((v) => v.count > 0);
 
   async function handleDownloadAll() {
     if (!test) return;
@@ -55,36 +54,18 @@ export default function QuestionBankTestPage() {
     setError("");
 
     try {
-      const { data: vs } = await supabase
-        .from("question_bank_variant_sets")
-        .select("mapping")
-        .eq("test_id", testId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (!vs) {
-        setError("Бұл тест үшін пересортировка кілті жоқ.");
-        setDownloading(false);
-        return;
-      }
-
-      const mapping = vs.mapping as Record<string, VariantSlot[]>;
-      const itemsByNumber = new Map<number, BankItem>(items.map((it) => [it.question_number, it]));
-
       const zip = new JSZip();
 
       for (const variantNumber of [1, 2, 3, 4]) {
-        const slots = mapping[String(variantNumber)];
-        if (!slots) continue;
+        const variantItems = items.filter((it) => it.variant_number === variantNumber);
+        if (variantItems.length === 0) continue;
 
         for (const lang of ["kk", "ru"] as const) {
           const blob = await buildVariantDocxBlob({
             nameWord: test.title,
             variantNumber,
             lang,
-            slots,
-            itemsByNumber,
+            items: variantItems,
           });
           const langLabel = lang === "kk" ? "kaz" : "rus";
           zip.file(`${test.code}-variant${variantNumber}-${langLabel}.docx`, blob);
@@ -114,19 +95,30 @@ export default function QuestionBankTestPage() {
         ← Сұрақтар банкі
       </Link>
       <h1 className="font-display text-2xl font-bold text-admin">{test.title}</h1>
-      <p className="mt-2 text-sm text-ink/60">
-        {test.code} · {items.length} сұрақ
-      </p>
+      <p className="mt-2 text-sm text-ink/60">{test.code}</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {variantCounts.map((v) => (
+          <span
+            key={v.variant}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+              v.count > 0 ? "bg-parent-soft text-parent" : "bg-red-50 text-red-700"
+            }`}
+          >
+            Нұсқа {v.variant}: {v.count} сұрақ
+          </span>
+        ))}
+      </div>
 
       <div className="mt-6 rounded-2xl border border-ink/10 bg-white p-5">
-        {!hasVariants && (
+        {!allVariantsReady && (
           <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            Бұл тест үшін пересортировка кілті әлі есептелмеген — жүктеу қолжетімсіз.
+            Барлық 4 нұсқа әлі толтырылмаған — жүктеу қолжетімсіз.
           </p>
         )}
         <button
           onClick={handleDownloadAll}
-          disabled={downloading || !hasVariants}
+          disabled={downloading || !allVariantsReady}
           className="focus-ring rounded-full bg-admin px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
           {downloading ? "Жасалуда..." : "8 файл жүктеу (4 нұсқа × 2 тіл)"}

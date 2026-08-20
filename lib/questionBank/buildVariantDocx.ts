@@ -12,8 +12,6 @@ export type BankItem = {
   image_svg: string | null;
 };
 
-export type VariantSlot = { question_number: number; choice_order: number[] };
-
 const LETTERS = "ABCDEF";
 
 /**
@@ -124,10 +122,9 @@ export async function buildVariantDocxBlob(opts: {
   nameWord: string;
   variantNumber: number;
   lang: "kk" | "ru";
-  slots: VariantSlot[];
-  itemsByNumber: Map<number, BankItem>;
+  items: BankItem[];
 }): Promise<Blob> {
-  const { nameWord, variantNumber, lang, slots, itemsByNumber } = opts;
+  const { nameWord, variantNumber, lang, items } = opts;
 
   const variantWord = lang === "kk" ? "Нұсқа" : "Вариант";
   const digitLine = String(variantNumber).repeat(12);
@@ -144,12 +141,11 @@ export async function buildVariantDocxBlob(opts: {
   children.push(new Paragraph({ text: "" }));
 
   const answerKey: string[] = [];
+  const sortedItems = [...items].sort((a, b) => a.question_number - b.question_number);
 
-  for (let index = 0; index < slots.length; index++) {
-    const slot = slots[index];
+  for (let index = 0; index < sortedItems.length; index++) {
+    const item = sortedItems[index];
     const qNum = index + 1;
-    const item = itemsByNumber.get(slot.question_number);
-    if (!item) continue;
 
     const questionText = (lang === "kk" ? item.text_kk : item.text_ru) ?? "";
     children.push(
@@ -184,9 +180,8 @@ export async function buildVariantDocxBlob(opts: {
       const correctText = item.choices?.[0]?.text ?? "";
       answerKey.push(`${qNum}-${correctText}`);
     } else {
-      for (let ci = 0; ci < slot.choice_order.length; ci++) {
-        const origIdx = slot.choice_order[ci];
-        const choice = item.choices[origIdx];
+      for (let ci = 0; ci < item.choices.length; ci++) {
+        const choice = item.choices[ci];
         const letter = LETTERS[ci] ?? "?";
         children.push(
           new Paragraph({

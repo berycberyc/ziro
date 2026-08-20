@@ -5,8 +5,17 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
 import { blocksForTestTypeCode, type StageBlock } from "@/lib/onlineTest/blocks";
-import { shuffleForVariant, type BankItem } from "@/lib/onlineTest/shuffleOnline";
 import MathText from "@/components/MathText";
+
+type BankItem = {
+  id: string;
+  question_number: number;
+  text_kk: string | null;
+  text_ru: string | null;
+  answer_format: string;
+  choices: { text: string; correct: boolean }[];
+  image_svg: string | null;
+};
 
 type Attempt = {
   id: string;
@@ -14,7 +23,6 @@ type Attempt = {
   current_block_key: string | null;
   current_block_started_at: string | null;
   answers: Record<string, Record<string, string>>;
-  block_orders: Record<string, { item_ids: string[]; choice_order: Record<string, number[]> }>;
   variant_number: number;
   score: number | null;
 };
@@ -33,10 +41,6 @@ export default function OnlineTestPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [ending, setEnding] = useState(false);
-  const [reviewItems, setReviewItems] = useState<
-    { blockLabel: string; item: BankItem; given: string | undefined }[] | null
-  >(null);
-  const [loadingReview, setLoadingReview] = useState(false);
 
   const attemptRef = useRef<Attempt | null>(null);
   const answersRef = useRef<Record<string, string>>({});
@@ -53,21 +57,14 @@ export default function OnlineTestPage() {
   const currentBlock = currentBlockIndex >= 0 ? blocks[currentBlockIndex] : null;
 
   const loadItemsForBlock = useCallback(
-    async (block: StageBlock & { question_bank_test_id: string }, order: string[], choiceOrder: Record<string, number[]>) => {
+    async (block: StageBlock & { question_bank_test_id: string }, variantNumber: number) => {
       const { data } = await supabase
         .from("question_bank_items")
-        .select("id, question_number, block_key, text_kk, text_ru, answer_format, choices, image_svg")
-        .in("id", order);
-      const byId = new Map((data ?? []).map((it: any) => [it.id, it]));
-      const ordered: BankItem[] = order
-        .map((id) => byId.get(id))
-        .filter(Boolean)
-        .map((it: any) => {
-          const co = choiceOrder[it.id];
-          const choices = co ? co.map((i) => it.choices[i]) : it.choices;
-          return { ...it, choices };
-        });
-      setCurrentItems(ordered);
+        .select("id, question_number, text_kk, text_ru, answer_format, choices, image_svg")
+        .eq("test_id", block.question_bank_test_id)
+        .eq("variant_number", variantNumber)
+        .order("question_number");
+      setCurrentItems((data ?? []) as BankItem[]);
     },
     []
   );
@@ -83,21 +80,20 @@ export default function OnlineTestPage() {
         [att.current_block_key ?? ""]: answersRef.current,
       };
 
-      // Score whatever blocks have full item data loaded is not guaranteed here,
-      // so scoring is computed server-side-equivalent by re-fetching all items.
-      const allBlockKeys = Object.keys(att.block_orders);
+      // Score by re-fetching every block's items for this variant directly —
+      // no shuffle/mapping to account for, since each variant's correct
+      // answer is just whatever that row says.
       let correct = 0;
       let total = 0;
-      for (const key of allBlockKeys) {
-        const order = att.block_orders[key]?.item_ids ?? [];
-        if (order.length === 0) continue;
+      for (const block of blocks) {
         const { data } = await supabase
           .from("question_bank_items")
           .select("id, answer_format, choices")
-          .in("id", order);
+          .eq("test_id", block.question_bank_test_id)
+          .eq("variant_number", att.variant_number);
         for (const item of data ?? []) {
           total += 1;
-          const given = mergedAnswers[key]?.[item.id];
+          const given = mergedAnswers[block.key]?.[item.id];
           if (!given) continue;
           if (item.answer_format === "numeric") {
             const correctText = item.choices?.[0]?.text?.trim();
@@ -123,7 +119,7 @@ export default function OnlineTestPage() {
       setAttempt({ ...att, status, answers: mergedAnswers, score });
       setEnding(false);
     },
-    []
+    [blocks]
   );
 
   // Anti-cheat: leaving the tab/app ends the test immediately with whatever was answered.
@@ -168,16 +164,11 @@ export default function OnlineTestPage() {
       })
       .eq("id", att.id);
 
-    const updated = {
-      ...att,
-      answers: mergedAnswers,
-      current_block_key: nextBlock.key,
-      current_block_started_at: nowIso,
-    };
+    const updated = { ...att, answers: mergedAnswers, current_block_key: nextBlock.key, current_block_started_at: nowIso };
     setAttempt(updated);
     setAnswers({});
     setSecondsLeft(nextBlock.durationMinutes * 60);
-    await loadItemsForBlock(nextBlock, updated.block_orders[nextBlock.key].item_ids, updated.block_orders[nextBlock.key].choice_order);
+    await loadItemsForBlock(nextBlock, att.variant_number);
   }, [blocks, finalizeAttempt, loadItemsForBlock]);
 
   // Countdown timer
@@ -208,7 +199,7 @@ export default function OnlineTestPage() {
 
       const { data: reg } = await supabase
         .from("registrations")
-        .select("id, format, payment_status, test_type_id, test_session_id")
+        .select("id, format, payment_status, test_type_id, test_session_id, test_variant")
         .eq("id", registrationId)
         .single();
 
@@ -217,6 +208,13 @@ export default function OnlineTestPage() {
         setLoading(false);
         return;
       }
+
+      if (!reg.test_variant) {
+        setError("Сізге әлі нұсқа тағайындалмаған. Әкімшіге хабарласыңыз.");
+        setLoading(false);
+        return;
+      }
+      const variantNumber = parseInt(String(reg.test_variant), 10) || 1;
 
       const { data: testType } = await supabase
         .from("test_types")
@@ -253,8 +251,7 @@ export default function OnlineTestPage() {
         setAttempt(existing as Attempt);
         if (existing.status === "in_progress" && existing.current_block_key) {
           const block = activeBlocks.find((b) => b.key === existing.current_block_key)!;
-          const order = existing.block_orders[block.key];
-          await loadItemsForBlock(block, order.item_ids, order.choice_order);
+          await loadItemsForBlock(block, existing.variant_number);
           setAnswers(existing.answers?.[block.key] ?? {});
           const elapsed = Math.floor(
             (Date.now() - new Date(existing.current_block_started_at).getTime()) / 1000
@@ -265,25 +262,9 @@ export default function OnlineTestPage() {
         return;
       }
 
-      // Create a new attempt: pick a variant, shuffle & freeze order for every block.
-      const variantNumber = 1 + Math.floor(Math.random() * 4);
-      const blockOrders: Attempt["block_orders"] = {};
-
-      for (const block of activeBlocks) {
-        const { data: items } = await supabase
-          .from("question_bank_items")
-          .select("id, question_number, block_key, text_kk, text_ru, answer_format, choices, image_svg")
-          .eq("test_id", block.question_bank_test_id)
-          .order("question_number");
-        const shuffled = shuffleForVariant((items ?? []) as BankItem[], variantNumber);
-        const choiceOrder: Record<string, number[]> = {};
-        for (const orig of items ?? []) {
-          const shuffledItem = shuffled.find((s) => s.id === orig.id)!;
-          choiceOrder[orig.id] = shuffledItem.choices.map((c) => orig.choices.indexOf(c));
-        }
-        blockOrders[block.key] = { item_ids: shuffled.map((s) => s.id), choice_order: choiceOrder };
-      }
-
+      // Create a new attempt — the variant is whatever was already assigned
+      // to this registration (same field used for offline printing), no
+      // randomness or shuffling to compute here anymore.
       const firstBlock = activeBlocks[0];
       const nowIso = new Date().toISOString();
       const { data: created } = await supabase
@@ -295,13 +276,12 @@ export default function OnlineTestPage() {
           current_block_key: firstBlock.key,
           current_block_started_at: nowIso,
           answers: {},
-          block_orders: blockOrders,
         })
         .select()
         .single();
 
       setAttempt(created as Attempt);
-      await loadItemsForBlock(firstBlock, blockOrders[firstBlock.key].item_ids, blockOrders[firstBlock.key].choice_order);
+      await loadItemsForBlock(firstBlock, variantNumber);
       setSecondsLeft(firstBlock.durationMinutes * 60);
       setLoading(false);
     }
@@ -317,35 +297,6 @@ export default function OnlineTestPage() {
       const merged = { ...attempt.answers, [attempt.current_block_key ?? ""]: { ...answersRef.current, [itemId]: value } };
       supabase.from("online_attempts").update({ answers: merged }).eq("id", attempt.id);
     }
-  }
-
-  async function loadReview() {
-    if (!attempt) return;
-    setLoadingReview(true);
-    const rows: { blockLabel: string; item: BankItem; given: string | undefined }[] = [];
-
-    for (const blockKey of Object.keys(attempt.block_orders)) {
-      const order = attempt.block_orders[blockKey];
-      const blockInfo = blocks.find((b) => b.key === blockKey);
-      const { data } = await supabase
-        .from("question_bank_items")
-        .select("id, question_number, block_key, text_kk, text_ru, answer_format, choices, image_svg")
-        .in("id", order.item_ids);
-      const byId = new Map((data ?? []).map((it: any) => [it.id, it]));
-      order.item_ids.forEach((id, idx) => {
-        const raw = byId.get(id);
-        if (!raw) return;
-        const co = order.choice_order[id];
-        const choices = co ? co.map((i) => raw.choices[i]) : raw.choices;
-        rows.push({
-          blockLabel: blockInfo?.labelKk ?? blockKey,
-          item: { ...raw, choices },
-          given: attempt.answers[blockKey]?.[id],
-        });
-      });
-    }
-    setReviewItems(rows);
-    setLoadingReview(false);
   }
 
   if (loading) return <main className="p-10 text-ink/50">Жүктелуде...</main>;
