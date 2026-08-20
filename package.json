@@ -17,7 +17,8 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
     "html5-qrcode": "^2.3.8",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "docx": "^9.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

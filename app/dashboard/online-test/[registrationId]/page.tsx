@@ -32,6 +32,10 @@ export default function OnlineTestPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [ending, setEnding] = useState(false);
+  const [reviewItems, setReviewItems] = useState<
+    { blockLabel: string; item: BankItem; given: string | undefined }[] | null
+  >(null);
+  const [loadingReview, setLoadingReview] = useState(false);
 
   const attemptRef = useRef<Attempt | null>(null);
   const answersRef = useRef<Record<string, string>>({});
@@ -312,6 +316,35 @@ export default function OnlineTestPage() {
       const merged = { ...attempt.answers, [attempt.current_block_key ?? ""]: { ...answersRef.current, [itemId]: value } };
       supabase.from("online_attempts").update({ answers: merged }).eq("id", attempt.id);
     }
+  }
+
+  async function loadReview() {
+    if (!attempt) return;
+    setLoadingReview(true);
+    const rows: { blockLabel: string; item: BankItem; given: string | undefined }[] = [];
+
+    for (const blockKey of Object.keys(attempt.block_orders)) {
+      const order = attempt.block_orders[blockKey];
+      const blockInfo = blocks.find((b) => b.key === blockKey);
+      const { data } = await supabase
+        .from("question_bank_items")
+        .select("id, question_number, block_key, text_kk, text_ru, answer_format, choices, image_svg")
+        .in("id", order.item_ids);
+      const byId = new Map((data ?? []).map((it: any) => [it.id, it]));
+      order.item_ids.forEach((id, idx) => {
+        const raw = byId.get(id);
+        if (!raw) return;
+        const co = order.choice_order[id];
+        const choices = co ? co.map((i) => raw.choices[i]) : raw.choices;
+        rows.push({
+          blockLabel: blockInfo?.labelKk ?? blockKey,
+          item: { ...raw, choices },
+          given: attempt.answers[blockKey]?.[id],
+        });
+      });
+    }
+    setReviewItems(rows);
+    setLoadingReview(false);
   }
 
   if (loading) return <main className="p-10 text-ink/50">Жүктелуде...</main>;

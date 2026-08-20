@@ -11,6 +11,7 @@ const navItems = [
   { href: "/admin/test-types", label: "Тест түрлері" },
   { href: "/admin/bookings", label: "Бронирование" },
   { href: "/admin/current-testing", label: "Ағымдағы тестілеу" },
+  { href: "/admin/question-bank", label: "Сұрақтар банкі" },
   { href: "/admin/results", label: "Нәтижелер" },
   { href: "/admin/online-test", label: "Онлайн тест" },
   { href: "/admin/zipgrade", label: "ZipGrade" },
