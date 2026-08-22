@@ -190,12 +190,20 @@ export default function AdminSessionDetailPage() {
         </div>
       </div>
 
-      <a
-        href={`/admin/sessions/${session.id}/online-blocks`}
-        className="focus-ring mt-3 inline-block text-sm font-semibold text-admin hover:underline"
-      >
-        Онлайн тест блоктарын баптау →
-      </a>
+      <div className="mt-3 flex flex-wrap gap-4">
+        <a
+          href={`/admin/sessions/${session.id}/questions`}
+          className="focus-ring inline-block text-sm font-semibold text-admin hover:underline"
+        >
+          Сұрақтарды енгізу →
+        </a>
+        <a
+          href={`/admin/sessions/${session.id}/online-blocks`}
+          className="focus-ring inline-block text-sm font-semibold text-ink/40 hover:underline"
+        >
+          (ескі) Онлайн тест блоктарын баптау →
+        </a>
+      </div>
 
       {confirmingDelete && (
         <div className="mt-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3">
