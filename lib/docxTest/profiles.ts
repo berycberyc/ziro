@@ -50,7 +50,7 @@ export const PROFILES: TestProfile[] = [
   },
   {
     id: "bil",
-    label: "БІЛ",
+    label: "БИЛ",
     totalQuestions: 60,
     answerFormat: "abcd",
     blocks: [

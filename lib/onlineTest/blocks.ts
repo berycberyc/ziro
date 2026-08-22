@@ -12,7 +12,7 @@ export const TEST_TYPE_BLOCKS: Record<string, StageBlock[]> = {
     { key: "nish_zharatylystanu", labelKk: "Жаратылыстану", labelRu: "Естествознание", durationMinutes: 30 },
     { key: "nish_tilder", labelKk: "Тілдер", labelRu: "Языки", durationMinutes: 120 },
   ],
-  BIL: [{ key: "bil", labelKk: "БІЛ", labelRu: "БИЛ", durationMinutes: 110 }],
+  BIL: [{ key: "bil", labelKk: "БИЛ", labelRu: "БИЛ", durationMinutes: 110 }],
   RFMS: [{ key: "rfmsh", labelKk: "РФМШ", labelRu: "РФМШ", durationMinutes: 120 }],
 };
 

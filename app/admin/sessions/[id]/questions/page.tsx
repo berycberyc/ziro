@@ -14,7 +14,7 @@ import {
 
 const TEST_TYPES = [
   { code: "NIS", label: "НИШ" },
-  { code: "BIL", label: "БІЛ" },
+  { code: "BIL", label: "БИЛ" },
   { code: "RFMS", label: "РФМШ" },
 ];
 

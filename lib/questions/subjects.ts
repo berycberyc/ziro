@@ -28,13 +28,13 @@ export const SUBJECT_LABELS: Record<SubjectKey, string> = {
   tilder_kk: "Тілдер (қазақ)",
   tilder_ru: "Тілдер (орыс)",
   tilder_en: "Тілдер (ағылшын)",
-  bil_math: "БІЛ — математика",
-  bil_reading: "БІЛ — оқылым",
+  bil_math: "БИЛ — математика",
+  bil_reading: "БИЛ — оқылым",
   rfmsh: "РФМШ",
 };
 
 // Which subjects use the "shared simple form" (Математика/Сандық/Жаратылыстану
-// style: plain question list, no passage grouping). Тілдер/БІЛ-reading use a
+// style: plain question list, no passage grouping). Тілдер/БИЛ-reading use a
 // different passage-based form (not built yet); RFMSH has no answer choices.
 export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math", "sandyq", "zharatylystanu", "bil_math"];
 export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder_kk", "tilder_ru", "tilder_en", "bil_reading"];

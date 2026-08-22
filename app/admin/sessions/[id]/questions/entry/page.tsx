@@ -6,7 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { SUBJECT_MAX_COUNT, SUBJECT_LABELS, type SubjectKey } from "@/lib/questions/subjects";
 
-type Topic = { id: string; name: string };
+type Topic = { id: string; name_kk: string; name_ru: string };
 type Choice = { text_kk: string; text_ru: string; correct: boolean };
 
 const emptyChoices = (): Choice[] =>
@@ -23,7 +23,9 @@ export default function QuestionEntryFormPage() {
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [questionNumber, setQuestionNumber] = useState(1);
+  const [highestSaved, setHighestSaved] = useState(0);
   const [topicId, setTopicId] = useState("");
+  const [sameLang, setSameLang] = useState(true);
   const [textKk, setTextKk] = useState("");
   const [textRu, setTextRu] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -48,12 +50,14 @@ export default function QuestionEntryFormPage() {
         setTopicId(data.topic_id ?? "");
         setTextKk(data.text_kk ?? "");
         setTextRu(data.text_ru ?? "");
+        setSameLang((data.text_kk ?? "") === (data.text_ru ?? ""));
         setImageUrl(data.image_url ?? null);
         setChoices(data.choices?.length === 4 ? data.choices : emptyChoices());
       } else {
         setTopicId("");
         setTextKk("");
         setTextRu("");
+        setSameLang(true);
         setImageUrl(null);
         setChoices(emptyChoices());
       }
@@ -66,12 +70,11 @@ export default function QuestionEntryFormPage() {
       setLoading(true);
       const { data: topicData } = await supabase
         .from("topics")
-        .select("id, name")
+        .select("id, name_kk, name_ru")
         .eq("subject", subject)
-        .order("name");
+        .order("name_kk");
       setTopics(topicData ?? []);
 
-      // Resume at the first empty question number, or 1 if none entered yet.
       const { data: existing } = await supabase
         .from("questions")
         .select("question_number")
@@ -80,7 +83,9 @@ export default function QuestionEntryFormPage() {
         .eq("variant_number", variant)
         .order("question_number", { ascending: false })
         .limit(1);
-      const nextNum = existing && existing.length > 0 ? Math.min(existing[0].question_number + 1, max) : 1;
+      const highest = existing && existing.length > 0 ? existing[0].question_number : 0;
+      setHighestSaved(highest);
+      const nextNum = Math.min(highest + 1, max);
       setQuestionNumber(nextNum);
       await loadQuestion(nextNum);
       setLoading(false);
@@ -88,6 +93,13 @@ export default function QuestionEntryFormPage() {
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, subject, variant]);
+
+  async function goToQuestion(num: number) {
+    if (num < 1 || num > max) return;
+    setQuestionNumber(num);
+    setError("");
+    await loadQuestion(num);
+  }
 
   async function handleImageUpload(file: File) {
     setUploading(true);
@@ -106,18 +118,37 @@ export default function QuestionEntryFormPage() {
   }
 
   function updateChoice(index: number, field: "text_kk" | "text_ru", value: string) {
-    setChoices((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
+    setChoices((prev) =>
+      prev.map((c, i) => {
+        if (i !== index) return c;
+        if (sameLang) return { ...c, text_kk: value, text_ru: value };
+        return { ...c, [field]: value };
+      })
+    );
   }
 
   function setCorrect(index: number) {
     setChoices((prev) => prev.map((c, i) => ({ ...c, correct: i === index })));
   }
 
+  function handleTextKkChange(value: string) {
+    setTextKk(value);
+    if (sameLang) setTextRu(value);
+  }
+
+  function handleSameLangToggle(checked: boolean) {
+    setSameLang(checked);
+    if (checked) {
+      setTextRu(textKk);
+      setChoices((prev) => prev.map((c) => ({ ...c, text_ru: c.text_kk })));
+    }
+  }
+
   function validate(): string | null {
     if (!topicId) return "Тема таңдалмаған.";
-    if (!textKk.trim() || !textRu.trim()) return "Сұрақ мәтіні (каз/рус) толтырылмаған.";
+    if (!textKk.trim() || (!sameLang && !textRu.trim())) return "Сұрақ мәтіні толтырылмаған.";
     for (const c of choices) {
-      if (!c.text_kk.trim() || !c.text_ru.trim()) return "Барлық 4 жауап нұсқасы (каз/рус) толтырылуы керек.";
+      if (!c.text_kk.trim() || (!sameLang && !c.text_ru.trim())) return "Барлық 4 жауап нұсқасы толтырылуы керек.";
     }
     if (!choices.some((c) => c.correct)) return "Дұрыс жауап белгіленбеген.";
     return null;
@@ -132,6 +163,9 @@ export default function QuestionEntryFormPage() {
     setSaving(true);
     setError("");
 
+    const finalTextRu = sameLang ? textKk : textRu;
+    const finalChoices = choices.map((c) => (sameLang ? { ...c, text_ru: c.text_kk } : c));
+
     const { error: saveErr } = await supabase.from("questions").upsert(
       {
         session_id: sessionId,
@@ -140,10 +174,10 @@ export default function QuestionEntryFormPage() {
         question_number: questionNumber,
         topic_id: topicId,
         text_kk: textKk,
-        text_ru: textRu,
+        text_ru: finalTextRu,
         image_url: imageUrl,
         answer_format: "abcd",
-        choices,
+        choices: finalChoices,
       },
       { onConflict: "session_id,subject,variant_number,question_number" }
     );
@@ -154,6 +188,7 @@ export default function QuestionEntryFormPage() {
       return;
     }
 
+    setHighestSaved((h) => Math.max(h, questionNumber));
     setSaving(false);
 
     if (andAdvance && questionNumber < max) {
@@ -177,9 +212,26 @@ export default function QuestionEntryFormPage() {
       <h1 className="font-display text-2xl font-bold text-admin">
         {SUBJECT_LABELS[subject]} — Нұсқа {variant}
       </h1>
-      <p className="mt-1 text-sm text-ink/60">
-        Сұрақ {questionNumber} / {max}
-      </p>
+
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          onClick={() => goToQuestion(questionNumber - 1)}
+          disabled={questionNumber <= 1}
+          className="focus-ring rounded-full border border-ink/15 px-3 py-1 text-sm disabled:opacity-30"
+        >
+          ← Алдыңғы
+        </button>
+        <p className="text-sm text-ink/60">
+          Сұрақ {questionNumber} / {max}
+        </p>
+        <button
+          onClick={() => goToQuestion(questionNumber + 1)}
+          disabled={questionNumber >= highestSaved + 1 || questionNumber >= max}
+          className="focus-ring rounded-full border border-ink/15 px-3 py-1 text-sm disabled:opacity-30"
+        >
+          Келесі →
+        </button>
+      </div>
 
       <div className="mt-6 flex flex-col gap-5 rounded-2xl border border-ink/10 bg-white p-6">
         <div>
@@ -192,7 +244,7 @@ export default function QuestionEntryFormPage() {
             <option value="">— таңдау —</option>
             {topics.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name}
+                {t.name_kk === t.name_ru ? t.name_kk : `${t.name_kk} / ${t.name_ru}`}
               </option>
             ))}
           </select>
@@ -207,24 +259,33 @@ export default function QuestionEntryFormPage() {
           )}
         </div>
 
+        <label className="flex items-center gap-2 text-sm text-ink/70">
+          <input type="checkbox" checked={sameLang} onChange={(e) => handleSameLangToggle(e.target.checked)} />
+          Бірдей мәтін екі тілде
+        </label>
+
         <div>
-          <label className="text-xs font-semibold text-ink/50">Сұрақ мәтіні — қазақша</label>
+          <label className="text-xs font-semibold text-ink/50">
+            {sameLang ? "Сұрақ мәтіні" : "Сұрақ мәтіні — қазақша"}
+          </label>
           <textarea
             value={textKk}
-            onChange={(e) => setTextKk(e.target.value)}
+            onChange={(e) => handleTextKkChange(e.target.value)}
             rows={3}
             className="focus-ring mt-1 w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
           />
         </div>
-        <div>
-          <label className="text-xs font-semibold text-ink/50">Текст вопроса — русский</label>
-          <textarea
-            value={textRu}
-            onChange={(e) => setTextRu(e.target.value)}
-            rows={3}
-            className="focus-ring mt-1 w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
-          />
-        </div>
+        {!sameLang && (
+          <div>
+            <label className="text-xs font-semibold text-ink/50">Текст вопроса — русский</label>
+            <textarea
+              value={textRu}
+              onChange={(e) => setTextRu(e.target.value)}
+              rows={3}
+              className="focus-ring mt-1 w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            />
+          </div>
+        )}
 
         <div>
           <label className="text-xs font-semibold text-ink/50">Сурет (міндетті емес)</label>
@@ -265,19 +326,21 @@ export default function QuestionEntryFormPage() {
                 />
                 <span className="text-sm font-semibold text-ink">{"ABCD"[i]})</span>
               </div>
-              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className={`mt-2 grid gap-2 ${sameLang ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
                 <input
                   value={c.text_kk}
                   onChange={(e) => updateChoice(i, "text_kk", e.target.value)}
-                  placeholder="қазақша"
+                  placeholder={sameLang ? "жауап" : "қазақша"}
                   className="focus-ring rounded-lg border border-ink/15 px-3 py-1.5 text-sm"
                 />
-                <input
-                  value={c.text_ru}
-                  onChange={(e) => updateChoice(i, "text_ru", e.target.value)}
-                  placeholder="русский"
-                  className="focus-ring rounded-lg border border-ink/15 px-3 py-1.5 text-sm"
-                />
+                {!sameLang && (
+                  <input
+                    value={c.text_ru}
+                    onChange={(e) => updateChoice(i, "text_ru", e.target.value)}
+                    placeholder="русский"
+                    className="focus-ring rounded-lg border border-ink/15 px-3 py-1.5 text-sm"
+                  />
+                )}
               </div>
             </div>
           ))}
