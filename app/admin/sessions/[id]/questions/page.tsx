@@ -8,6 +8,8 @@ import {
   SUBJECT_MAX_COUNT,
   SUBJECT_LABELS,
   SIMPLE_ABCD_SUBJECTS,
+  PASSAGE_SUBJECTS,
+  NUMERIC_SUBJECTS,
   TEST_TYPE_SUBJECTS,
   type SubjectKey,
 } from "@/lib/questions/subjects";
@@ -91,6 +93,13 @@ export default function SessionQuestionsSelectorPage() {
             const current = counts[`${variant}:${subj}`] ?? 0;
             const complete = current >= max;
             const isSimpleForm = SIMPLE_ABCD_SUBJECTS.includes(subj as SubjectKey);
+            const isPassageForm = PASSAGE_SUBJECTS.includes(subj as SubjectKey);
+            const isNumericForm = NUMERIC_SUBJECTS.includes(subj as SubjectKey);
+            const entryPath = isSimpleForm
+              ? "entry"
+              : isPassageForm
+              ? "entry-passage"
+              : "entry-numeric";
             return (
               <div
                 key={subj}
@@ -102,16 +111,12 @@ export default function SessionQuestionsSelectorPage() {
                     {current} / {max} сұрақ {complete ? "— дайын" : ""}
                   </p>
                 </div>
-                {isSimpleForm ? (
-                  <Link
-                    href={`/admin/sessions/${sessionId}/questions/entry?variant=${variant}&subject=${subj}`}
-                    className="focus-ring rounded-full bg-admin px-5 py-2 text-sm font-semibold text-white hover:opacity-90"
-                  >
-                    Енгізу
-                  </Link>
-                ) : (
-                  <span className="rounded-full bg-ink/5 px-4 py-2 text-xs text-ink/40">Жақында</span>
-                )}
+                <Link
+                  href={`/admin/sessions/${sessionId}/questions/${entryPath}?variant=${variant}&subject=${subj}`}
+                  className="focus-ring rounded-full bg-admin px-5 py-2 text-sm font-semibold text-white hover:opacity-90"
+                >
+                  Енгізу
+                </Link>
               </div>
             );
           })}
