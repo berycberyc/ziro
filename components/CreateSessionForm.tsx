@@ -20,15 +20,8 @@ export default function CreateSessionForm({
   const [price, setPrice] = useState("");
   const [registrationOpensAt, setRegistrationOpensAt] = useState("");
   const [registrationClosesAt, setRegistrationClosesAt] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-
-  function toggleType(id: string) {
-    setSelectedTypes((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
-    );
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,9 +50,11 @@ export default function CreateSessionForm({
       return;
     }
 
-    const links = selectedTypes.map((typeId) => ({
+    // Every trial test now automatically includes all test types (НИШ/БИЛ/РФМШ)
+    // — the parent picks one at booking time, admin no longer selects a subset.
+    const links = testTypes.map((tt) => ({
       test_session_id: session.id,
-      test_type_id: typeId,
+      test_type_id: tt.id,
     }));
 
     const { error: linkError } = await supabase
@@ -80,7 +75,6 @@ export default function CreateSessionForm({
     setPrice("");
     setRegistrationOpensAt("");
     setRegistrationClosesAt("");
-    setSelectedTypes([]);
     onCreated();
   }
 
@@ -156,32 +150,17 @@ export default function CreateSessionForm({
         </div>
       </div>
 
-      <div>
-        <p className="mb-2 text-sm font-medium text-ink/70">
-          Экзамен түрлері / Виды экзаменов
+      {testTypes.length === 0 && (
+        <p className="text-xs text-red-500">
+          Ескерту: жүйеде әлі тест түрлері жоқ (НИШ/БИЛ/РФМШ). Сессия құрылғанымен, оларға
+          автоматты байланыс жасалмайды. Алдымен "Тест түрлері" бетінен қосыңыз.
         </p>
-        <div className="flex flex-wrap gap-2">
-          {testTypes.length === 0 && (
-            <p className="text-xs text-ink/50">
-              Әзірге тест түрі жоқ. Оны қосу үшін Android қолданбасын пайдаланыңыз.
-            </p>
-          )}
-          {testTypes.map((tt) => (
-            <button
-              type="button"
-              key={tt.id}
-              onClick={() => toggleType(tt.id)}
-              className={`focus-ring rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
-                selectedTypes.includes(tt.id)
-                  ? "border-admin bg-admin text-white"
-                  : "border-ink/15 bg-white text-ink/70"
-              }`}
-            >
-              {tt.name_kk} / {tt.name_ru}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
+      {testTypes.length > 0 && (
+        <p className="text-xs text-ink/40">
+          Барлық тест түрлері (НИШ/БИЛ/РФМШ) осы сессияға автоматты түрде қосылады.
+        </p>
+      )}
 
       {error && <p className="text-sm text-red-600">Қате шықты, қайта көріңіз.</p>}
 
