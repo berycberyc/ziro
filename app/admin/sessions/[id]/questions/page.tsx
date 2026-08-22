@@ -8,6 +8,7 @@ import {
   SUBJECT_MAX_COUNT,
   SUBJECT_LABELS,
   SIMPLE_ABCD_SUBJECTS,
+  QUANTITY_SUBJECTS,
   PASSAGE_SUBJECTS,
   NUMERIC_SUBJECTS,
   TEST_TYPE_SUBJECTS,
@@ -15,9 +16,9 @@ import {
 } from "@/lib/questions/subjects";
 
 const TEST_TYPES = [
-  { code: "NIS", label: "НИШ" },
+  { code: "NIS", label: "НИШ / НЗМ" },
   { code: "BIL", label: "БИЛ" },
-  { code: "RFMS", label: "РФМШ" },
+  { code: "RFMS", label: "РФМШ / РФММ" },
 ];
 
 export default function SessionQuestionsSelectorPage() {
@@ -93,10 +94,13 @@ export default function SessionQuestionsSelectorPage() {
             const current = counts[`${variant}:${subj}`] ?? 0;
             const complete = current >= max;
             const isSimpleForm = SIMPLE_ABCD_SUBJECTS.includes(subj as SubjectKey);
+            const isQuantityForm = QUANTITY_SUBJECTS.includes(subj as SubjectKey);
             const isPassageForm = PASSAGE_SUBJECTS.includes(subj as SubjectKey);
             const isNumericForm = NUMERIC_SUBJECTS.includes(subj as SubjectKey);
             const entryPath = isSimpleForm
               ? "entry"
+              : isQuantityForm
+              ? "entry-quantity"
               : isPassageForm
               ? "entry-passage"
               : "entry-numeric";

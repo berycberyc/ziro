@@ -23,20 +23,31 @@ export const SUBJECT_MAX_COUNT: Record<SubjectKey, number> = {
 
 export const SUBJECT_LABELS: Record<SubjectKey, string> = {
   math: "Математика",
-  sandyq: "Сандық сипаттама",
-  zharatylystanu: "Жаратылыстану",
-  tilder_kk: "Тілдер (қазақ)",
-  tilder_ru: "Тілдер (орыс)",
-  tilder_en: "Тілдер (ағылшын)",
+  sandyq: "Сандық сипаттамалар / Количественные характеристики",
+  zharatylystanu: "Жаратылыстану / Естествознание",
+  tilder_kk: "Тілдер / Языки (қазақ)",
+  tilder_ru: "Тілдер / Языки (орыс)",
+  tilder_en: "Тілдер / Языки (ағылшын)",
   bil_math: "БИЛ — математика",
   bil_reading: "БИЛ — оқылым",
-  rfmsh: "РФМШ",
+  rfmsh: "РФМШ / РФММ",
 };
 
-// Which subjects use the "shared simple form" (Математика/Сандық/Жаратылыстану
-// style: plain question list, no passage grouping). Тілдер/БИЛ-reading use a
-// different passage-based form (not built yet); RFMSH has no answer choices.
-export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math", "sandyq", "zharatylystanu", "bil_math"];
+// Fixed answer choices for Сандық сипаттамалар (quantity comparison) —
+// always the same 4, never typed per-question.
+export const QUANTITY_CHOICE_LABELS: Record<"A" | "B" | "C" | "D", { kk: string; ru: string }> = {
+  A: { kk: "А бағаны үлкен", ru: "Столбец A больше" },
+  B: { kk: "В бағаны үлкен", ru: "Столбец B больше" },
+  C: { kk: "А = В", ru: "A = B" },
+  D: { kk: "Анықтау мүмкін емес", ru: "Невозможно определить" },
+};
+
+// Which subjects use the "shared simple form" (Математика/Жаратылыстану/
+// БИЛ-математика style: plain ABCD question list). Сандық has its own
+// quantity-comparison form; Тілдер/БИЛ-оқылым use the passage-based form;
+// РФМШ has no answer choices at all.
+export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math", "zharatylystanu", "bil_math"];
+export const QUANTITY_SUBJECTS: SubjectKey[] = ["sandyq"];
 export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder_kk", "tilder_ru", "tilder_en", "bil_reading"];
 export const NUMERIC_SUBJECTS: SubjectKey[] = ["rfmsh"];
 
