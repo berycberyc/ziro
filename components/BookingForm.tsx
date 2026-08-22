@@ -24,11 +24,13 @@ export default function BookingForm({
   const [format, setFormat] = useState<"offline" | "online">("offline");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [duplicateError, setDuplicateError] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(false);
+    setDuplicateError(false);
 
     const { error } = await supabase.from("registrations").insert({
       parent_id: parentId,
@@ -41,7 +43,12 @@ export default function BookingForm({
 
     setLoading(false);
     if (error) {
-      setError(true);
+      if (error.code === "23505") {
+        // unique violation — this student already has a booking for this trial test
+        setDuplicateError(true);
+      } else {
+        setError(true);
+      }
       return;
     }
     onBooked();
@@ -123,6 +130,12 @@ export default function BookingForm({
           </div>
 
           {error && <p className="text-sm text-red-600">Қате шықты, қайта көріңіз.</p>}
+          {duplicateError && (
+            <p className="text-sm text-red-600">
+              Бұл оқушы осы пробный тестке бұрын тіркелген. Бір оқушы бір пробный тестке тек бір рет
+              тіркеле алады.
+            </p>
+          )}
 
           <div className="flex gap-2">
             <button
