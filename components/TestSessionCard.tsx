@@ -24,7 +24,8 @@ export default function TestSessionCard({
         <span className="font-display text-lg font-bold text-gold">{price}</span>
         <button
           onClick={onBook}
-          className="focus-ring rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-parchment shadow-sm transition-all hover:opacity-90 hover:shadow-md"
+          disabled={!onBook}
+          className="focus-ring rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-parchment shadow-sm transition-all hover:opacity-90 hover:shadow-md disabled:cursor-not-allowed disabled:bg-ink/20 disabled:text-ink/50 disabled:shadow-none"
         >
           {bookLabel}
         </button>

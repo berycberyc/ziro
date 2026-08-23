@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import CreateSessionForm from "@/components/CreateSessionForm";
 import SessionsList from "@/components/SessionsList";
+import DummyDataButton from "@/components/DummyDataButton";
 
 type TestType = { id: string; code: string; name_kk: string; name_ru: string };
 type Session = {
@@ -49,6 +50,10 @@ export default function AdminSessionsPage() {
 
       <section className="mt-6">
         <CreateSessionForm testTypes={testTypes} onCreated={loadSessions} />
+      </section>
+
+      <section className="mt-6">
+        <DummyDataButton />
       </section>
     </div>
   );

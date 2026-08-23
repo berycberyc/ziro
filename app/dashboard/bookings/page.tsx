@@ -310,7 +310,7 @@ export default function BookingsPage() {
                 !b.session?.has_results && (
                   <div className="border-t border-ink/10 px-5 py-4">
                     <Link
-                      href={`/dashboard/online-test/${b.id}`}
+                      href="/kiru"
                       className="focus-ring inline-flex items-center gap-2 rounded-full bg-teacher px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
                     >
                       {t.startOnlineTest}

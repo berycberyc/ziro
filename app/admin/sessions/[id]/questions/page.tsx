@@ -115,12 +115,22 @@ export default function SessionQuestionsSelectorPage() {
                     {current} / {max} сұрақ {complete ? "— дайын" : ""}
                   </p>
                 </div>
-                <Link
-                  href={`/admin/sessions/${sessionId}/questions/${entryPath}?variant=${variant}&subject=${subj}`}
-                  className="focus-ring rounded-full bg-admin px-5 py-2 text-sm font-semibold text-white hover:opacity-90"
-                >
-                  Енгізу
-                </Link>
+                <div className="flex gap-2">
+                  {current > 0 && (
+                    <Link
+                      href={`/admin/sessions/${sessionId}/questions/preview?variant=${variant}&subject=${subj}`}
+                      className="focus-ring rounded-full border border-admin px-5 py-2 text-sm font-semibold text-admin hover:bg-admin-soft"
+                    >
+                      Қарау
+                    </Link>
+                  )}
+                  <Link
+                    href={`/admin/sessions/${sessionId}/questions/${entryPath}?variant=${variant}&subject=${subj}`}
+                    className="focus-ring rounded-full bg-admin px-5 py-2 text-sm font-semibold text-white hover:opacity-90"
+                  >
+                    Енгізу
+                  </Link>
+                </div>
               </div>
             );
           })}

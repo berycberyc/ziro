@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type { SessionDetail } from "@/lib/sessions";
@@ -28,6 +28,20 @@ export default function BookingForm({
   const [error, setError] = useState(false);
   const [duplicateError, setDuplicateError] = useState(false);
   const [bookedWaitingPayment, setBookedWaitingPayment] = useState(false);
+  const [alreadyBookedIds, setAlreadyBookedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    async function checkExisting() {
+      const { data } = await supabase
+        .from("registrations")
+        .select("student_id")
+        .eq("test_session_id", session.id)
+        .in("student_id", students.map((s) => s.id));
+      setAlreadyBookedIds(new Set((data ?? []).map((r) => r.student_id)));
+    }
+    if (students.length > 0) checkExisting();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,8 +105,9 @@ export default function BookingForm({
             >
               <option value="">Таңдаңыз</option>
               {students.map((s) => (
-                <option key={s.id} value={s.id}>
+                <option key={s.id} value={s.id} disabled={alreadyBookedIds.has(s.id)}>
                   {s.full_name}
+                  {alreadyBookedIds.has(s.id) ? " (тіркелген)" : ""}
                 </option>
               ))}
             </select>

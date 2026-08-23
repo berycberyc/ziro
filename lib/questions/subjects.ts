@@ -9,6 +9,18 @@ export type SubjectKey =
   | "bil_reading"
   | "rfmsh";
 
+export const SUBJECT_MINUTES: Record<SubjectKey, number> = {
+  math: 60,
+  sandyq: 30,
+  zharatylystanu: 30,
+  tilder_kk: 40,
+  tilder_ru: 40,
+  tilder_en: 40,
+  bil_math: 92,
+  bil_reading: 18,
+  rfmsh: 120,
+};
+
 export const SUBJECT_MAX_COUNT: Record<SubjectKey, number> = {
   math: 40,
   sandyq: 60,

@@ -11,6 +11,9 @@ export default function UploadDownloadPage() {
   const [selectedId, setSelectedId] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingClassroom, setUploadingClassroom] = useState(false);
+  const [classroomMessage, setClassroomMessage] = useState("");
+  const [classroomError, setClassroomError] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -47,6 +50,7 @@ export default function UploadDownloadPage() {
       const student = studentsMap.get(r.student_id);
       const testType = testTypesMap.get(r.test_type_id);
       return {
+        "Тіркеу ID": r.id,
         "ZipGrade ID": student?.zipgrade_id ?? "",
         "Аты-жөні": student?.full_name ?? "",
         "Тест түрі": testType?.name_kk ?? "",
@@ -63,6 +67,52 @@ export default function UploadDownloadPage() {
     const title = trialTests.find((t) => t.id === selectedId)?.title_ru ?? "session";
     XLSX.writeFile(workbook, `${title}-students.xlsx`);
     setDownloading(false);
+  }
+
+  async function handleUploadClassroomAssignments(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingClassroom(true);
+    setClassroomError("");
+    setClassroomMessage("");
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any>(sheet);
+
+      let updated = 0;
+      for (const r of rows) {
+        const regId = String(r["Тіркеу ID"] ?? r["registration_id"] ?? "").trim();
+        if (!regId) continue;
+
+        const classroom = String(r["Аудитория"] ?? r["classroom"] ?? "").trim();
+        const seat = String(r["Орын"] ?? r["seat"] ?? "").trim();
+        const variant = String(r["Вариант"] ?? r["variant"] ?? "").trim();
+
+        const { error: updErr } = await supabase
+          .from("registrations")
+          .update({
+            classroom: classroom || null,
+            seat: seat || null,
+            test_variant: variant || null,
+          })
+          .eq("id", regId);
+
+        if (!updErr) updated += 1;
+      }
+
+      if (updated === 0) {
+        setClassroomError("Файлда \"Тіркеу ID\" бағаны бойынша сәйкестік табылмады.");
+      } else {
+        setClassroomMessage(`${updated} тіркеу жаңартылды.`);
+      }
+    } catch (err: any) {
+      setClassroomError(err?.message ?? "Файлды оқу кезінде қате шықты.");
+    }
+    setUploadingClassroom(false);
+    e.target.value = "";
   }
 
   async function handleUploadResults(e: React.ChangeEvent<HTMLInputElement>) {
@@ -143,6 +193,23 @@ export default function UploadDownloadPage() {
             >
               {downloading ? "Жүктелуде..." : "Excel-ге жүктеп алу"}
             </button>
+          </div>
+
+          <div className="rounded-2xl border border-ink/10 bg-white p-5">
+            <p className="font-semibold text-ink">Аудитория/орын/вариантты жүктеу</p>
+            <p className="mt-1 text-sm text-ink/60">
+              Жоғарыдағы файлды толтырғаннан кейін (Аудитория/Орын/Вариант бағандары), осында қайта
+              жүктеңіз — "Тіркеу ID" бойынша сәйкестендіріледі.
+            </p>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleUploadClassroomAssignments}
+              disabled={uploadingClassroom}
+              className="focus-ring mt-3 block text-sm file:mr-3 file:rounded-full file:border-0 file:bg-admin-soft file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-admin"
+            />
+            {classroomMessage && <p className="mt-2 text-sm text-parent">{classroomMessage}</p>}
+            {classroomError && <p className="mt-2 text-sm text-red-600">{classroomError}</p>}
           </div>
 
           <div className="rounded-2xl border border-ink/10 bg-white p-5">

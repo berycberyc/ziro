@@ -89,6 +89,8 @@ export default function AdminSessionDetailPage() {
         start_time: form.start_time || null,
         address: form.address || null,
         price: Number(form.price),
+        registration_opens_at: form.registration_opens_at || null,
+        registration_closes_at: form.registration_closes_at || null,
       })
       .eq("id", sessionId);
     setEditing(false);
@@ -259,6 +261,24 @@ export default function AdminSessionDetailPage() {
             value={form.address ?? ""}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
           />
+          <div>
+            <label className="mb-1 block text-xs text-ink/50">Тіркеу басталуы</label>
+            <input
+              type="date"
+              className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+              value={form.registration_opens_at ?? ""}
+              onChange={(e) => setForm({ ...form, registration_opens_at: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-ink/50">Тіркеу аяқталуы</label>
+            <input
+              type="date"
+              className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+              value={form.registration_closes_at ?? ""}
+              onChange={(e) => setForm({ ...form, registration_closes_at: e.target.value })}
+            />
+          </div>
           <input
             type="number"
             className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"

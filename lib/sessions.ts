@@ -5,45 +5,31 @@ export type SessionSummary = {
   titleKk: string;
   titleRu: string;
   sessionDate: string;
+  address: string | null;
   price: number;
-  testTypeCodes: string[];
+  registrationOpensAt: string | null;
+  registrationClosesAt: string | null;
 };
 
 export async function getUpcomingSessions(): Promise<SessionSummary[]> {
   const { data, error } = await supabase
-    .from("session_test_types")
-    .select(
-      `
-      test_session_id,
-      price,
-      test_sessions ( id, title_kk, title_ru, session_date, price, is_active ),
-      test_types ( code )
-    `
-    );
+    .from("test_sessions")
+    .select("id, title_kk, title_ru, session_date, address, price, registration_opens_at, registration_closes_at, is_active")
+    .eq("is_active", true)
+    .order("session_date", { ascending: true });
 
   if (error || !data) return [];
 
-  const bySession = new Map<string, SessionSummary>();
-
-  for (const row of data as any[]) {
-    if (!row.test_sessions?.is_active) continue;
-    const id = row.test_sessions.id;
-    if (!bySession.has(id)) {
-      bySession.set(id, {
-        sessionId: id,
-        titleKk: row.test_sessions.title_kk,
-        titleRu: row.test_sessions.title_ru,
-        sessionDate: row.test_sessions.session_date,
-        price: row.test_sessions.price,
-        testTypeCodes: [],
-      });
-    }
-    bySession.get(id)!.testTypeCodes.push(row.test_types.code);
-  }
-
-  return Array.from(bySession.values()).sort((a, b) =>
-    a.sessionDate.localeCompare(b.sessionDate)
-  );
+  return data.map((s) => ({
+    sessionId: s.id,
+    titleKk: s.title_kk,
+    titleRu: s.title_ru,
+    sessionDate: s.session_date,
+    address: s.address,
+    price: s.price,
+    registrationOpensAt: s.registration_opens_at,
+    registrationClosesAt: s.registration_closes_at,
+  }));
 }
 
 export type SessionDetail = {

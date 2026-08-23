@@ -7,16 +7,11 @@ import { useLang } from "@/lib/LangContext";
 import AppShell from "@/components/AppShell";
 
 const navItems = [
-  { href: "/admin/sessions", label: "Сессиялар" },
-  { href: "/admin/test-types", label: "Тест түрлері" },
-  { href: "/admin/bookings", label: "Бронирование" },
+  { href: "/admin/sessions", label: "Пробные тесты" },
   { href: "/admin/upload-download", label: "Жүктеу/түсіру" },
-  { href: "/admin/current-testing", label: "Ағымдағы тестілеу" },
   { href: "/admin/monitoring", label: "Мониторинг" },
-  { href: "/admin/question-bank", label: "Сұрақтар банкі" },
+  { href: "/admin/bookings", label: "Оплата" },
   { href: "/admin/topics", label: "Тақырыптар" },
-  { href: "/admin/results", label: "Нәтижелер" },
-  { href: "/admin/online-test", label: "Онлайн тест" },
   { href: "/admin/zipgrade", label: "ZipGrade" },
 ];
 
