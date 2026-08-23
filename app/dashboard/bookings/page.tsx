@@ -41,6 +41,7 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [qrDataUrls, setQrDataUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function load() {
@@ -115,6 +116,18 @@ export default function BookingsPage() {
 
       setBookings(merged);
       setLoading(false);
+
+      const QRCode = (await import("qrcode")).default;
+      const entries = await Promise.all(
+        merged
+          .filter((b) => b.payment_status === "paid")
+          .map(async (b) => {
+            const content = b.short_code ?? b.id;
+            const dataUrl = await QRCode.toDataURL(content, { width: 320, margin: 1 });
+            return [b.id, dataUrl] as const;
+          })
+      );
+      setQrDataUrls(Object.fromEntries(entries));
     }
 
     load();
@@ -210,8 +223,7 @@ export default function BookingsPage() {
       <div className="mt-6 flex flex-col gap-6">
         {bookings.map((b) => {
           const status = statusLabel(b.payment_status);
-          const qrContent = b.short_code ?? b.id;
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrContent)}`;
+          const qrDataUrl = qrDataUrls[b.id] ?? "";
           const sessionTitle = lang === "kk" ? b.session?.title_kk : b.session?.title_ru;
           const testTypeName = lang === "kk" ? b.testType?.name_kk : b.testType?.name_ru;
 
@@ -246,13 +258,19 @@ export default function BookingsPage() {
               {b.payment_status === "paid" ? (
                 <div className="grid gap-6 p-5 sm:grid-cols-[auto_1fr] sm:items-center">
                   <div className="flex justify-center">
-                    <img
-                      src={qrUrl}
-                      alt="QR"
-                      width={160}
-                      height={160}
-                      className="rounded-2xl border border-ink/10 bg-white p-2 shadow-sm"
-                    />
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt="QR"
+                        width={160}
+                        height={160}
+                        className="rounded-2xl border border-ink/10 bg-white p-2 shadow-sm"
+                      />
+                    ) : (
+                      <div className="flex h-[160px] w-[160px] items-center justify-center rounded-2xl border border-ink/10 bg-ink/5 text-xs text-ink/40">
+                        {t.loading}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2 text-sm text-ink/80">
                     <p>
@@ -289,7 +307,7 @@ export default function BookingsPage() {
                       onClick={() =>
                         downloadPass(b.id, `ziro-propusk-${b.student?.full_name ?? b.short_code ?? b.id}`)
                       }
-                      disabled={downloadingId === b.id}
+                      disabled={downloadingId === b.id || !qrDataUrl}
                       className="focus-ring mt-2 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm hover:bg-ink/5 disabled:opacity-50"
                     >
                       {downloadingId === b.id ? t.loading : t.printSave}
@@ -399,9 +417,8 @@ export default function BookingsPage() {
                   </p>
 
                   <img
-                    src={qrUrl}
+                    src={qrDataUrl}
                     alt="QR"
-                    crossOrigin="anonymous"
                     width={210}
                     height={210}
                     style={{ borderRadius: "16px", background: "#fff", padding: "10px", border: "1px solid #15181e1a", marginBottom: "32px" }}
