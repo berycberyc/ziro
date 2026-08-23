@@ -83,12 +83,6 @@ export default function OfertaPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
-        {lang === "kk"
-          ? "Заңгер негізгі мәтінді тексерді. Тек 5.1-тармақтағы қайтару шарттарының нақты тұжырымдамасы (Claude жазған) заңгерге қосымша көрсетілмеді — қалауыңызша тексертіңіз."
-          : "Юрист проверил базовый текст. Только формулировка условий возврата в п.5.1 (составлена Claude) отдельно юристу не показывалась — при желании можно дополнительно уточнить."}
-      </div>
-
       <h1 className="font-display text-2xl font-bold text-ink">{title}</h1>
       <div className="mt-6 whitespace-pre-line text-sm leading-relaxed text-ink/80">{text}</div>
     </div>
