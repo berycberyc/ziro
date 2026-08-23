@@ -33,8 +33,7 @@ export default function UploadDownloadPage() {
     const { data: regs } = await supabase
       .from("registrations")
       .select("id, format, payment_status, classroom, seat, test_variant, student_id, test_type_id")
-      .eq("test_session_id", selectedId)
-      .eq("payment_status", "paid");
+      .eq("test_session_id", selectedId);
 
     const studentIds = [...new Set((regs ?? []).map((r) => r.student_id))];
     const testTypeIds = [...new Set((regs ?? []).map((r) => r.test_type_id))];
@@ -65,6 +64,7 @@ export default function UploadDownloadPage() {
         "Мектеп": student?.school ?? "",
         "Тест түрі": testType?.name_kk ?? "",
         Формат: r.format,
+        "Төлем": r.payment_status === "paid" ? "Төленді" : "Күтілуде",
         Аудитория: r.classroom ?? "",
         Орын: r.seat ?? "",
         Вариант: r.test_variant ?? "",
@@ -194,7 +194,8 @@ export default function UploadDownloadPage() {
           <div className="rounded-2xl border border-ink/10 bg-white p-5">
             <p className="font-semibold text-ink">Тіркелген оқушылар тізімі</p>
             <p className="mt-1 text-sm text-ink/60">
-              Аудитория/орын/вариантты толтыру үшін офлайн басып шығаруға дайындау.
+              Барлық тіркелгендер (төлегендер де, төлемегендер де) — "Төлем" бағанынан ажыратуға
+              болады. Аудитория/орын/вариантты толтыру үшін офлайн басып шығаруға дайындау.
             </p>
             <button
               onClick={handleDownloadStudents}
