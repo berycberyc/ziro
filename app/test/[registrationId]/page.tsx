@@ -361,7 +361,7 @@ export default function TestTakingPage() {
       )}
 
       <div className="rounded-2xl border border-ink/10 bg-white p-5">
-        <p className="font-medium text-ink">
+        <p className="whitespace-pre-line font-medium text-ink">
           {qIndex + 1}. <MathText text={(lang === "kk" ? q.text_kk : q.text_ru) ?? ""} />
         </p>
         {q.image_url && <img src={q.image_url} alt="" className="my-3 max-w-xs" />}

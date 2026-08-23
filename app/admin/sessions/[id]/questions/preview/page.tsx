@@ -97,7 +97,7 @@ export default function QuestionPreviewPage() {
 
               <div className="rounded-2xl border border-ink/10 bg-white p-4">
                 <div className="flex items-center justify-between">
-                  <p className="font-medium text-ink">
+                  <p className="whitespace-pre-line font-medium text-ink">
                     {q.question_number}. <MathText text={q.text_kk ?? ""} />
                     {q.text_ru && q.text_ru !== q.text_kk && (
                       <span className="block text-sm text-ink/50">
