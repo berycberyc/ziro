@@ -11,12 +11,25 @@ type Booking = {
   test_sessions: { title_kk: string; title_ru: string } | null;
 };
 
+type TrialTest = { id: string; title_kk: string; title_ru: string; session_date: string };
+
 export default function BookingsPage() {
+  const [trialTests, setTrialTests] = useState<TrialTest[]>([]);
+  const [selectedTestId, setSelectedTestId] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingToggleId, setPendingToggleId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    supabase
+      .from("test_sessions")
+      .select("id, title_kk, title_ru, session_date")
+      .order("session_date", { ascending: false })
+      .then(({ data }) => setTrialTests(data ?? []));
+  }, []);
+
+  const load = useCallback(async (testId: string) => {
+    setLoading(true);
     const { data } = await supabase
       .from("registrations")
       .select(
@@ -27,29 +40,47 @@ export default function BookingsPage() {
         test_sessions ( title_kk, title_ru )
         `
       )
+      .eq("test_session_id", testId)
       .order("created_at", { ascending: false });
     setBookings((data as any) ?? []);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (selectedTestId) load(selectedTestId);
+  }, [selectedTestId, load]);
 
   async function togglePayment(id: string, currentStatus: string) {
     const newStatus = currentStatus === "paid" ? "pending" : "paid";
     await supabase.from("registrations").update({ payment_status: newStatus }).eq("id", id);
     setPendingToggleId(null);
-    load();
+    load(selectedTestId);
   }
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-admin">Бронирование</h1>
+      <h1 className="font-display text-2xl font-bold text-admin">Оплата</h1>
 
-      {loading && <p className="mt-6 text-sm text-ink/50">Жүктелуде...</p>}
-      {!loading && bookings.length === 0 && (
-        <p className="mt-6 text-sm text-ink/50">Әзірге брондау жоқ.</p>
+      <select
+        value={selectedTestId}
+        onChange={(e) => setSelectedTestId(e.target.value)}
+        className="focus-ring mt-4 w-full max-w-md rounded-xl border border-ink/15 px-3 py-2 text-sm"
+      >
+        <option value="">— пробный тестті таңдау —</option>
+        {trialTests.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.title_kk} / {t.title_ru} — {t.session_date}
+          </option>
+        ))}
+      </select>
+
+      {!selectedTestId && (
+        <p className="mt-6 text-sm text-ink/50">Алдымен пробный тест таңдаңыз.</p>
+      )}
+
+      {selectedTestId && loading && <p className="mt-6 text-sm text-ink/50">Жүктелуде...</p>}
+      {selectedTestId && !loading && bookings.length === 0 && (
+        <p className="mt-6 text-sm text-ink/50">Бұл тест бойынша брондау жоқ.</p>
       )}
 
       <div className="mt-6 flex flex-col gap-2">
@@ -59,8 +90,7 @@ export default function BookingsPage() {
               <div>
                 <p className="font-medium text-ink">{b.students?.full_name}</p>
                 <p className="text-sm text-ink/50">
-                  {b.test_types?.name_kk} / {b.test_types?.name_ru} —{" "}
-                  {b.test_sessions?.title_kk}
+                  {b.test_types?.name_kk} / {b.test_types?.name_ru}
                 </p>
               </div>
 

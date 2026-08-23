@@ -11,9 +11,20 @@ type SessionRow = {
   title_kk: string;
   title_ru: string;
   session_date: string;
+  start_time: string | null;
+  address: string | null;
+  registration_opens_at: string | null;
+  registration_closes_at: string | null;
   is_active: boolean;
 };
 type Student = { id: string; full_name: string };
+
+function isRegistrationOpen(s: SessionRow): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  if (s.registration_opens_at && today < s.registration_opens_at) return false;
+  if (s.registration_closes_at && today > s.registration_closes_at) return false;
+  return true;
+}
 
 export default function TestsPage() {
   const { t, lang } = useLang();
@@ -36,7 +47,9 @@ export default function TestsPage() {
 
     supabase
       .from("test_sessions")
-      .select("id, title_kk, title_ru, session_date, is_active")
+      .select(
+        "id, title_kk, title_ru, session_date, start_time, address, registration_opens_at, registration_closes_at, is_active"
+      )
       .eq("is_active", true)
       .order("session_date", { ascending: true })
       .then(({ data }) => setSessions(data ?? []));
@@ -61,25 +74,43 @@ export default function TestsPage() {
         {sessions.length === 0 && (
           <p className="text-sm text-ink/50">{t.noAvailableTests}</p>
         )}
-        {sessions.map((s) => (
-          <div
-            key={s.id}
-            className="flex flex-col gap-3 rounded-xl border border-ink/10 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div>
-              <p className="font-medium text-ink">
-                {lang === "kk" ? s.title_kk : s.title_ru}
-              </p>
-              <p className="text-sm text-ink/50">{s.session_date}</p>
-            </div>
-            <button
-              onClick={() => openBooking(s.id)}
-              className="focus-ring self-start rounded-full bg-parent px-5 py-2 text-sm font-semibold text-white hover:opacity-90 sm:self-auto"
+        {sessions.map((s) => {
+          const open = isRegistrationOpen(s);
+          return (
+            <div
+              key={s.id}
+              className="flex flex-col gap-3 rounded-xl border border-ink/10 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              {t.book}
-            </button>
-          </div>
-        ))}
+              <div>
+                <p className="font-medium text-ink">
+                  {lang === "kk" ? s.title_kk : s.title_ru}
+                </p>
+                <p className="text-sm text-ink/50">
+                  {t.dateLabel}: {s.session_date}
+                  {s.start_time ? `, ${s.start_time}` : ""}
+                </p>
+                {s.address && <p className="text-sm text-ink/50">{t.addressLabel}: {s.address}</p>}
+                {(s.registration_opens_at || s.registration_closes_at) && (
+                  <p className="text-xs text-ink/40">
+                    {t.registrationWindowLabel}: {s.registration_opens_at ?? "—"} — {s.registration_closes_at ?? "—"}
+                  </p>
+                )}
+              </div>
+              {open ? (
+                <button
+                  onClick={() => openBooking(s.id)}
+                  className="focus-ring self-start rounded-full bg-parent px-5 py-2 text-sm font-semibold text-white hover:opacity-90 sm:self-auto"
+                >
+                  {t.book}
+                </button>
+              ) : (
+                <span className="self-start rounded-full bg-ink/5 px-4 py-2 text-xs text-ink/40 sm:self-auto">
+                  {t.registrationClosed}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {bookingSession && userId && (

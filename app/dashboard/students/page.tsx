@@ -8,10 +8,18 @@ import StudentList from "@/components/StudentList";
 
 type Student = {
   id: string;
+  first_name: string | null;
+  last_name: string | null;
   full_name: string;
+  gender: string | null;
   grade: string | null;
+  region: string | null;
+  city: string | null;
   school: string | null;
+  iin: string | null;
+  language: string | null;
   photo_url: string | null;
+  zipgrade_id: string | null;
 };
 
 export default function StudentsPage() {
@@ -22,7 +30,7 @@ export default function StudentsPage() {
   const loadStudents = useCallback(async (parentId: string) => {
     const { data } = await supabase
       .from("students")
-      .select("id, full_name, grade, school, photo_url")
+      .select("id, first_name, last_name, full_name, gender, grade, region, city, school, iin, language, photo_url, zipgrade_id")
       .eq("parent_id", parentId)
       .order("created_at", { ascending: false });
     setStudents(data ?? []);
@@ -44,7 +52,9 @@ export default function StudentsPage() {
       <section className="mt-6">
         <h2 className="font-display text-lg font-bold text-ink">{t.myChildrenTitle}</h2>
         <div className="mt-4">
-          <StudentList students={students} />
+          {userId && (
+            <StudentList students={students} parentId={userId} onChanged={() => loadStudents(userId)} />
+          )}
         </div>
       </section>
 

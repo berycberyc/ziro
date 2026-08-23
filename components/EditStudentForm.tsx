@@ -5,32 +5,47 @@ import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
 import { REGIONS } from "@/lib/kzRegions";
 
-const CONSENT_TEXT_KK =
-  "Мен, көрсетілген оқушының ата-анасы/заңды өкілі бола отырып, «Дербес деректер және оларды қорғау туралы» Қазақстан Республикасының Заңына сәйкес, баланың дербес деректерін (аты-жөні, ЖСН, туған күні, фотосурет және осы нысанда көрсетілген өзге де деректер) сынақ тестілеуін ұйымдастыру және өткізу мақсатында жинауға және өңдеуге келісім беремін.";
-const CONSENT_TEXT_RU =
-  "Я, являясь родителем/законным представителем указанного ученика, даю согласие на сбор и обработку персональных данных ребёнка (ФИО, ИИН, дата рождения, фотография и иные данные, указанные в этой форме) в целях организации и проведения пробного тестирования, в соответствии с Законом Республики Казахстан «О персональных данных и их защите».";
-
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
 
-export default function AddStudentForm({
+type Student = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string;
+  gender: string | null;
+  grade: string | null;
+  region: string | null;
+  city: string | null;
+  school: string | null;
+  iin: string | null;
+  language: string | null;
+  photo_url: string | null;
+};
+
+export default function EditStudentForm({
+  student,
   parentId,
-  onAdded,
+  onSaved,
+  onCancel,
 }: {
+  student: Student;
   parentId: string;
-  onAdded: () => void;
+  onSaved: () => void;
+  onCancel: () => void;
 }) {
   const { t, lang } = useLang();
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [gender, setGender] = useState("");
-  const [grade, setGrade] = useState("");
-  const [region, setRegion] = useState("");
-  const [city, setCity] = useState("");
-  const [school, setSchool] = useState("");
-  const [iin, setIin] = useState("");
-  const [language, setLanguage] = useState("kk");
+  const [firstName, setFirstName] = useState(student.first_name ?? "");
+  const [lastName, setLastName] = useState(student.last_name ?? "");
+  const [gender, setGender] = useState(student.gender ?? "");
+  const [grade, setGrade] = useState(student.grade ?? "");
+  const [region, setRegion] = useState(
+    REGIONS.find((r) => r.name_kk === student.region || r.name_ru === student.region)?.key ?? ""
+  );
+  const [city, setCity] = useState(student.city ?? "");
+  const [school, setSchool] = useState(student.school ?? "");
+  const [iin, setIin] = useState(student.iin ?? "");
+  const [language, setLanguage] = useState(student.language ?? "kk");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [consentChecked, setConsentChecked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -58,14 +73,10 @@ export default function AddStudentForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!consentChecked) {
-      setError(t.consentRequired);
-      return;
-    }
     setLoading(true);
     setError("");
 
-    let photoUrl: string | null = null;
+    let photoUrl = student.photo_url;
 
     if (photoFile) {
       const ext = photoFile.name.split(".").pop();
@@ -89,44 +100,33 @@ export default function AddStudentForm({
     const selectedRegion = REGIONS.find((r) => r.key === region);
     const regionName = selectedRegion ? (lang === "kk" ? selectedRegion.name_kk : selectedRegion.name_ru) : "";
 
-    const { error: insertError } = await supabase.from("students").insert({
-      parent_id: parentId,
-      first_name: firstName,
-      last_name: lastName,
-      full_name: `${firstName} ${lastName}`.trim(),
-      gender: gender || null,
-      grade,
-      region: regionName || null,
-      city,
-      school,
-      iin,
-      language,
-      photo_url: photoUrl,
-      data_consent_given_at: new Date().toISOString(),
-      data_consent_text_kk: CONSENT_TEXT_KK,
-      data_consent_text_ru: CONSENT_TEXT_RU,
-    });
+    const { error: updateError } = await supabase
+      .from("students")
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        gender: gender || null,
+        grade,
+        region: regionName || null,
+        city,
+        school,
+        iin,
+        language,
+        photo_url: photoUrl,
+      })
+      .eq("id", student.id);
 
     setLoading(false);
-    if (insertError) {
+    if (updateError) {
       setError(t.errorGeneric);
       return;
     }
-    setFirstName("");
-    setLastName("");
-    setGender("");
-    setGrade("");
-    setRegion("");
-    setCity("");
-    setSchool("");
-    setIin("");
-    setPhotoFile(null);
-    setConsentChecked(false);
-    onAdded();
+    onSaved();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-3 rounded-2xl border border-ink/10 bg-white p-5 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="grid gap-3 rounded-2xl border border-parent/30 bg-parent-soft/20 p-5 sm:grid-cols-2">
       <input
         required
         placeholder={t.firstName}
@@ -214,6 +214,9 @@ export default function AddStudentForm({
 
       <div className="sm:col-span-2">
         <label className="mb-1 block text-sm font-medium text-ink/70">{t.photoLabel}</label>
+        {student.photo_url && !photoFile && (
+          <img src={student.photo_url} alt="" className="mb-2 h-14 w-14 rounded-full object-cover" />
+        )}
         <input
           type="file"
           accept="image/*"
@@ -223,26 +226,21 @@ export default function AddStudentForm({
         <p className="mt-1 text-xs text-ink/50">{t.photoNote}</p>
       </div>
 
-      <div className="sm:col-span-2">
-        <label className="flex items-start gap-2 text-xs leading-relaxed text-ink/70">
-          <input
-            type="checkbox"
-            checked={consentChecked}
-            onChange={(e) => setConsentChecked(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0"
-          />
-          <span>{lang === "kk" ? CONSENT_TEXT_KK : CONSENT_TEXT_RU}</span>
-        </label>
-      </div>
-
-      <div className="sm:col-span-2">
-        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+      <div className="flex gap-3 sm:col-span-2">
+        {error && <p className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"
           disabled={loading}
           className="focus-ring rounded-full bg-parent px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
-          {t.add}
+          {t.saveChanges}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="focus-ring rounded-full border border-ink/15 px-5 py-2.5 text-sm font-semibold text-ink/60 hover:bg-ink/5"
+        >
+          {t.cancel}
         </button>
       </div>
     </form>

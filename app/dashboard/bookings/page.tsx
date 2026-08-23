@@ -17,7 +17,7 @@ type Registration = {
   test_session_id: string;
 };
 
-type StudentInfo = { id: string; full_name: string; photo_url: string | null; zipgrade_id: string | null };
+type StudentInfo = { id: string; full_name: string; photo_url: string | null; zipgrade_id: string | null; iin: string | null };
 type TestTypeInfo = { id: string; code: string; name_kk: string; name_ru: string };
 type SessionInfo = {
   id: string;
@@ -82,7 +82,7 @@ export default function BookingsPage() {
       const sessionIds = [...new Set(registrations.map((r) => r.test_session_id))];
 
       const [studentsRes, testTypesRes, sessionsRes] = await Promise.all([
-        supabase.from("students").select("id, full_name, photo_url, zipgrade_id").in("id", studentIds),
+        supabase.from("students").select("id, full_name, photo_url, zipgrade_id, iin").in("id", studentIds),
         supabase.from("test_types").select("id, code, name_kk, name_ru").in("id", testTypeIds),
         supabase
           .from("test_sessions")
@@ -268,8 +268,17 @@ export default function BookingsPage() {
                       </p>
                     )}
                     <div className="mt-3 rounded-xl bg-parchment px-4 py-3 text-xs leading-relaxed text-ink/60">
-                      <p>{t.passArriveNote}</p>
-                      <p className="mt-1">{t.passBringNote}</p>
+                      {b.format === "online" ? (
+                        <>
+                          <p>{t.passOnlineNote1}</p>
+                          <p className="mt-1">{t.passOnlineNote2}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>{t.passArriveNote}</p>
+                          <p className="mt-1">{t.passBringNote}</p>
+                        </>
+                      )}
                     </div>
                     <button
                       onClick={() =>
@@ -287,9 +296,12 @@ export default function BookingsPage() {
               )}
 
               {b.session?.has_results && (
-                <p className="border-t border-ink/10 px-5 py-3 text-sm font-semibold text-parent">
-                  {t.resultsReady}
-                </p>
+                <Link
+                  href={`/dashboard/results/${b.id}`}
+                  className="block border-t border-ink/10 px-5 py-3 text-sm font-semibold text-parent hover:underline"
+                >
+                  {t.resultsReady} →
+                </Link>
               )}
 
               {b.format === "online" &&
@@ -361,11 +373,20 @@ export default function BookingsPage() {
                   <p style={{ fontSize: "30px", fontWeight: 800, color: "#151A2E", margin: "0 0 8px 0", textAlign: "center" }}>
                     {b.student?.full_name}
                   </p>
-                  <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 32px 0", textAlign: "center" }}>
+                  <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 4px 0", textAlign: "center" }}>
                     {t.studentIdLabel}:{" "}
                     <span style={{ fontWeight: 700, color: "#151A2E" }}>
                       {b.student?.zipgrade_id ?? "—"}
                     </span>
+                  </p>
+                  {b.student?.iin && (
+                    <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 4px 0", textAlign: "center" }}>
+                      {t.iinLabel}: <span style={{ fontWeight: 700, color: "#151A2E" }}>{b.student.iin}</span>
+                    </p>
+                  )}
+                  <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 32px 0", textAlign: "center" }}>
+                    {t.bookingNumberLabel}:{" "}
+                    <span style={{ fontWeight: 700, color: "#151A2E" }}>{b.short_code ?? "—"}</span>
                   </p>
 
                   <img
@@ -406,8 +427,17 @@ export default function BookingsPage() {
                   </div>
 
                   <div style={{ marginTop: "32px", width: "100%", padding: "18px 22px", background: "#F6F4EE", borderRadius: "14px", fontSize: "13.5px", lineHeight: 1.7, color: "#5a5a5a" }}>
-                    <p style={{ margin: 0 }}>{t.passArriveNote}</p>
-                    <p style={{ margin: "6px 0 0 0" }}>{t.passBringNote}</p>
+                    {b.format === "online" ? (
+                      <>
+                        <p style={{ margin: 0 }}>{t.passOnlineNote1}</p>
+                        <p style={{ margin: "6px 0 0 0" }}>{t.passOnlineNote2}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p style={{ margin: 0 }}>{t.passArriveNote}</p>
+                        <p style={{ margin: "6px 0 0 0" }}>{t.passBringNote}</p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

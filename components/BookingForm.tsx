@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type { SessionDetail } from "@/lib/sessions";
 
@@ -22,9 +23,11 @@ export default function BookingForm({
   const [studentId, setStudentId] = useState("");
   const [testTypeId, setTestTypeId] = useState("");
   const [format, setFormat] = useState<"offline" | "online">("offline");
+  const [offerChecked, setOfferChecked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [duplicateError, setDuplicateError] = useState(false);
+  const [bookedWaitingPayment, setBookedWaitingPayment] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,7 +54,7 @@ export default function BookingForm({
       }
       return;
     }
-    onBooked();
+    setBookedWaitingPayment(true);
   }
 
   return (
@@ -61,6 +64,22 @@ export default function BookingForm({
           {session.titleKk} / {session.titleRu}
         </h2>
 
+        {bookedWaitingPayment ? (
+          <div className="mt-4 flex flex-col gap-4">
+            <div className="rounded-xl bg-parent-soft px-4 py-3 text-sm text-parent">
+              Брондау сәтті өтті. Төлемді растау үшін төмендегі деректер бойынша хабарласыңыз:
+            </div>
+            <div className="rounded-xl bg-parchment px-4 py-3 text-sm leading-relaxed text-ink/70">
+              [Толтырылады: телефон нөмірі / Kaspi нөмірі / банк реквизиттері]
+            </div>
+            <button
+              onClick={onBooked}
+              className="focus-ring rounded-full bg-parent px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+            >
+              Түсінікті
+            </button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-ink/70">Оқушы</label>
@@ -129,6 +148,22 @@ export default function BookingForm({
             </div>
           </div>
 
+          <label className="flex items-start gap-2 text-xs leading-relaxed text-ink/70">
+            <input
+              type="checkbox"
+              checked={offerChecked}
+              onChange={(e) => setOfferChecked(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span>
+              Мен{" "}
+              <Link href="/oferta" target="_blank" className="font-semibold text-parent underline">
+                жария оферта
+              </Link>{" "}
+              шарттарын оқыдым және келісемін.
+            </span>
+          </label>
+
           {error && <p className="text-sm text-red-600">Қате шықты, қайта көріңіз.</p>}
           {duplicateError && (
             <p className="text-sm text-red-600">
@@ -147,13 +182,14 @@ export default function BookingForm({
             </button>
             <button
               type="submit"
-              disabled={loading || students.length === 0}
+              disabled={loading || students.length === 0 || !offerChecked}
               className="focus-ring flex-1 rounded-full bg-parent px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
-              Брондау
+              Төлеу
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

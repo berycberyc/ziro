@@ -1,0 +1,188 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+
+type TrialTest = {
+  id: string;
+  title_kk: string;
+  title_ru: string;
+  session_date: string;
+  registration_opens_at: string | null;
+  registration_closes_at: string | null;
+  is_checking: boolean;
+  has_results: boolean;
+};
+
+type RegRow = {
+  id: string;
+  format: string;
+  payment_status: string;
+  checked_in_at: string | null;
+  students: { full_name: string } | null;
+  test_types: { name_kk: string; name_ru: string } | null;
+};
+
+type Stage = "not_open" | "registration" | "checking" | "after";
+
+function computeStage(t: TrialTest): Stage {
+  const today = new Date().toISOString().slice(0, 10);
+  if (t.has_results) return "after";
+  if (t.is_checking) return "checking";
+  if (t.registration_opens_at && today < t.registration_opens_at) return "not_open";
+  return "registration";
+}
+
+export default function MonitoringPage() {
+  const [trialTests, setTrialTests] = useState<TrialTest[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [selected, setSelected] = useState<TrialTest | null>(null);
+  const [regs, setRegs] = useState<RegRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from("test_sessions")
+      .select("id, title_kk, title_ru, session_date, registration_opens_at, registration_closes_at, is_checking, has_results")
+      .order("session_date", { ascending: false })
+      .then(({ data }) => setTrialTests(data ?? []));
+  }, []);
+
+  useEffect(() => {
+    async function load() {
+      if (!selectedId) {
+        setSelected(null);
+        return;
+      }
+      setLoading(true);
+      const t = trialTests.find((x) => x.id === selectedId) ?? null;
+      setSelected(t);
+
+      const { data } = await supabase
+        .from("registrations")
+        .select(
+          `
+          id, format, payment_status, checked_in_at,
+          students ( full_name ),
+          test_types ( name_kk, name_ru )
+          `
+        )
+        .eq("test_session_id", selectedId);
+      setRegs((data as any) ?? []);
+      setLoading(false);
+    }
+    load();
+  }, [selectedId, trialTests]);
+
+  const stage = selected ? computeStage(selected) : null;
+
+  return (
+    <div>
+      <h1 className="font-display text-2xl font-bold text-admin">Мониторинг</h1>
+
+      <select
+        value={selectedId}
+        onChange={(e) => setSelectedId(e.target.value)}
+        className="focus-ring mt-4 w-full max-w-md rounded-xl border border-ink/15 px-3 py-2 text-sm"
+      >
+        <option value="">— пробный тестті таңдау —</option>
+        {trialTests.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.title_kk} / {t.title_ru} — {t.session_date}
+          </option>
+        ))}
+      </select>
+
+      {!selectedId && <p className="mt-6 text-sm text-ink/50">Алдымен пробный тест таңдаңыз.</p>}
+      {selectedId && loading && <p className="mt-6 text-sm text-ink/50">Жүктелуде...</p>}
+
+      {selectedId && !loading && stage === "not_open" && (
+        <p className="mt-6 rounded-xl bg-ink/5 px-4 py-3 text-sm text-ink/50">
+          Бұл тест үшін тіркеу әлі басталмаған.
+        </p>
+      )}
+
+      {selectedId && !loading && stage === "registration" && (
+        <div className="mt-6">
+          <p className="mb-3 text-sm font-semibold text-ink/70">
+            Тіркелгендер ({regs.length})
+          </p>
+          <div className="flex flex-col gap-2">
+            {regs.map((r) => (
+              <div key={r.id} className="flex items-center justify-between rounded-xl border border-ink/10 bg-white px-4 py-2.5 text-sm">
+                <span className="font-medium text-ink">{r.students?.full_name}</span>
+                <span className="text-ink/50">
+                  {r.test_types?.name_kk} · {r.format === "online" ? "Онлайн" : "Офлайн"} ·{" "}
+                  {r.payment_status === "paid" ? "Төленді" : "Күтілуде"}
+                </span>
+              </div>
+            ))}
+            {regs.length === 0 && <p className="text-sm text-ink/40">Әзірге ешкім тіркелмеген.</p>}
+          </div>
+        </div>
+      )}
+
+      {selectedId && !loading && stage === "checking" && (
+        <div className="mt-6">
+          {(() => {
+            const paid = regs.filter((r) => r.payment_status === "paid");
+            const arrived = paid.filter((r) => r.checked_in_at);
+            return (
+              <div className="flex flex-wrap gap-3">
+                <span className="rounded-full bg-admin-soft px-4 py-2 text-sm font-semibold text-admin">
+                  Брондалған: {paid.length}
+                </span>
+                <span className="rounded-full bg-parent-soft px-4 py-2 text-sm font-semibold text-parent">
+                  Келді: {arrived.length}
+                </span>
+                <span className="rounded-full bg-teacher-soft px-4 py-2 text-sm font-semibold text-teacher">
+                  Қалды: {paid.length - arrived.length}
+                </span>
+                <span className="rounded-full bg-ink/5 px-4 py-2 text-sm text-ink/60">
+                  Онлайн: {paid.filter((r) => r.format === "online").length} · Офлайн:{" "}
+                  {paid.filter((r) => r.format === "offline").length}
+                </span>
+              </div>
+            );
+          })()}
+          <Link
+            href={`/admin/current-testing/${selectedId}`}
+            className="focus-ring mt-4 inline-block text-sm font-semibold text-admin hover:underline"
+          >
+            Толық тізім (аудитория бойынша) →
+          </Link>
+        </div>
+      )}
+
+      {selectedId && !loading && stage === "after" && (
+        <div className="mt-6">
+          <p className="mb-3 text-sm font-semibold text-ink/70">
+            Келді/келмеді тізімі (ақшаны қайтару даулары үшін)
+          </p>
+          <div className="flex flex-col gap-2">
+            {regs
+              .filter((r) => r.payment_status === "paid")
+              .map((r) => (
+                <div key={r.id} className="flex items-center justify-between rounded-xl border border-ink/10 bg-white px-4 py-2.5 text-sm">
+                  <span className="font-medium text-ink">{r.students?.full_name}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-ink/50">{r.format === "online" ? "Онлайн" : "Офлайн"}</span>
+                    {r.format === "offline" ? (
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${r.checked_in_at ? "bg-parent-soft text-parent" : "bg-red-50 text-red-600"}`}>
+                        {r.checked_in_at ? "Келді" : "Келмеді"}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-ink/5 px-3 py-1 text-xs text-ink/40">
+                        Онлайн қатысуы әлі бақыланбайды
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
