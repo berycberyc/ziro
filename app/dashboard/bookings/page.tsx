@@ -126,6 +126,7 @@ export default function BookingsPage() {
   }
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState("");
 
   async function waitForImages(node: HTMLElement) {
     const imgs = Array.from(node.querySelectorAll("img"));
@@ -167,6 +168,7 @@ export default function BookingsPage() {
     if (!node) return;
 
     setDownloadingId(id);
+    setDownloadError("");
 
     try {
       await waitForImages(node);
@@ -185,6 +187,9 @@ export default function BookingsPage() {
       });
       pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
       pdf.save(`${fileName}.pdf`);
+    } catch (err) {
+      console.error("Pass download failed:", err);
+      setDownloadError("Пропускты жүктеу кезінде қате шықты. Қайта көріңіз.");
     } finally {
       setDownloadingId(null);
     }
@@ -289,6 +294,9 @@ export default function BookingsPage() {
                     >
                       {downloadingId === b.id ? t.loading : t.printSave}
                     </button>
+                    {downloadError && downloadingId === null && (
+                      <p className="mt-2 text-xs text-red-600">{downloadError}</p>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -376,18 +384,18 @@ export default function BookingsPage() {
                   </p>
                   <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 4px 0", textAlign: "center" }}>
                     {t.studentIdLabel}:{" "}
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: "#16233F" }}>
                       {b.student?.zipgrade_id ?? "—"}
                     </span>
                   </p>
                   {b.student?.iin && (
                     <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 4px 0", textAlign: "center" }}>
-                      {t.iinLabel}: <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>{b.student.iin}</span>
+                      {t.iinLabel}: <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: "#16233F" }}>{b.student.iin}</span>
                     </p>
                   )}
                   <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 32px 0", textAlign: "center" }}>
                     {t.bookingNumberLabel}:{" "}
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>{b.short_code ?? "—"}</span>
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: "#16233F" }}>{b.short_code ?? "—"}</span>
                   </p>
 
                   <img
@@ -414,7 +422,7 @@ export default function BookingsPage() {
                       <span style={{ color: "#8a8a8a" }}>
                         {t.dateLabel} / {t.timeLabel}
                       </span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: "#16233F" }}>
                         {b.session?.session_date}
                         {b.session?.start_time ? `, ${b.session.start_time}` : ""}
                       </span>
