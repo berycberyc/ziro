@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Unbounded, Manrope, IBM_Plex_Mono } from "next/font/google";
+import { Manrope, IBM_Plex_Mono } from "next/font/google";
 import { LangProvider } from "@/lib/LangContext";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
-const unbounded = Unbounded({
+const manropeDisplay = Manrope({
   subsets: ["latin", "cyrillic"],
   variable: "--font-display",
-  weight: ["500", "600", "700", "800"],
+  weight: ["700", "800"],
 });
 
 const manrope = Manrope({
@@ -34,7 +34,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="kk">
-      <body className={`${unbounded.variable} ${manrope.variable} ${plexMono.variable} font-body`}>
+      <body className={`${manropeDisplay.variable} ${manrope.variable} ${plexMono.variable} font-body`}>
         <LangProvider>{children}</LangProvider>
       </body>
     </html>
