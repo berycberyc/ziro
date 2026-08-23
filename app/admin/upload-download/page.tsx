@@ -40,7 +40,10 @@ export default function UploadDownloadPage() {
     const testTypeIds = [...new Set((regs ?? []).map((r) => r.test_type_id))];
 
     const [studentsRes, testTypesRes] = await Promise.all([
-      supabase.from("students").select("id, full_name, zipgrade_id").in("id", studentIds),
+      supabase
+        .from("students")
+        .select("id, first_name, last_name, iin, language, grade, region, city, school, zipgrade_id")
+        .in("id", studentIds),
       supabase.from("test_types").select("id, name_kk, name_ru").in("id", testTypeIds),
     ]);
     const studentsMap = new Map((studentsRes.data ?? []).map((s) => [s.id, s]));
@@ -52,7 +55,14 @@ export default function UploadDownloadPage() {
       return {
         "Тіркеу ID": r.id,
         "ZipGrade ID": student?.zipgrade_id ?? "",
-        "Аты-жөні": student?.full_name ?? "",
+        "Тегі": student?.last_name ?? "",
+        "Аты": student?.first_name ?? "",
+        "ИИН": student?.iin ?? "",
+        "Тіл": student?.language ?? "",
+        "Сынып": student?.grade ?? "",
+        "Облыс": student?.region ?? "",
+        "Қала": student?.city ?? "",
+        "Мектеп": student?.school ?? "",
         "Тест түрі": testType?.name_kk ?? "",
         Формат: r.format,
         Аудитория: r.classroom ?? "",

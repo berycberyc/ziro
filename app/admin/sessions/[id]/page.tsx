@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 
 type Registration = {
@@ -26,7 +25,6 @@ type SessionInfo = {
   price: number;
   registration_opens_at: string | null;
   registration_closes_at: string | null;
-  is_active: boolean;
   is_checking: boolean;
   has_results: boolean;
 };
@@ -39,7 +37,6 @@ export default function AdminSessionDetailPage() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
-  const [importMessage, setImportMessage] = useState("");
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<SessionInfo>>({});
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -48,7 +45,7 @@ export default function AdminSessionDetailPage() {
     const { data: sessionData } = await supabase
       .from("test_sessions")
       .select(
-        "id, title_kk, title_ru, session_date, start_time, address, price, registration_opens_at, registration_closes_at, is_active, is_checking, has_results"
+        "id, title_kk, title_ru, session_date, start_time, address, price, registration_opens_at, registration_closes_at, is_checking, has_results"
       )
       .eq("id", sessionId)
       .single();
@@ -114,58 +111,6 @@ export default function AdminSessionDetailPage() {
     load();
   }
 
-  function exportExcel() {
-    const rows = registrations.map((r) => ({
-      ID: r.id,
-      "ФИО": r.students?.full_name ?? "",
-      "Тип теста": `${r.test_types?.name_kk ?? ""} / ${r.test_types?.name_ru ?? ""}`,
-      "Формат": r.format,
-      "Язык": r.students?.language ?? "",
-      "ИИН": r.students?.iin ?? "",
-      "Аудитория": r.classroom ?? "",
-      "Орын": r.seat ?? "",
-      "Вариант": r.test_variant ?? "",
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Тізім");
-    XLSX.writeFile(workbook, `${session?.title_ru ?? "session"}.xlsx`);
-  }
-
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportMessage("Жүктелуде...");
-
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<any>(sheet);
-
-    let updated = 0;
-    for (const row of rows) {
-      const id = row["ID"];
-      const classroom = row["Аудитория"];
-      const seat = row["Орын"];
-      const variant = row["Вариант"];
-      if (!id) continue;
-      const { error } = await supabase
-        .from("registrations")
-        .update({
-          classroom: classroom != null ? String(classroom) : null,
-          seat: seat != null ? String(seat) : null,
-          test_variant: variant != null ? String(variant) : null,
-        })
-        .eq("id", id);
-      if (!error) updated++;
-    }
-
-    setImportMessage(`${updated} жазба жаңартылды.`);
-    load();
-    e.target.value = "";
-  }
-
   if (loading || !session) {
     return <p className="text-sm text-ink/50">Жүктелуде...</p>;
   }
@@ -190,21 +135,6 @@ export default function AdminSessionDetailPage() {
             Өшіру
           </button>
         </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-4">
-        <a
-          href={`/admin/sessions/${session.id}/questions`}
-          className="focus-ring inline-block text-sm font-semibold text-admin hover:underline"
-        >
-          Сұрақтарды енгізу →
-        </a>
-        <a
-          href={`/admin/sessions/${session.id}/online-blocks`}
-          className="focus-ring inline-block text-sm font-semibold text-ink/40 hover:underline"
-        >
-          (ескі) Онлайн тест блоктарын баптау →
-        </a>
       </div>
 
       {confirmingDelete && (
@@ -295,15 +225,14 @@ export default function AdminSessionDetailPage() {
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          onClick={() => updateSessionField("is_active", !session.is_active)}
-          className={`focus-ring rounded-full border px-4 py-2 text-sm font-medium ${
-            session.is_active ? "border-admin bg-admin text-white" : "border-ink/15 text-ink/70"
-          }`}
+      {/* Workflow row: entry → checking → results, left to right in real order */}
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        <a
+          href={`/admin/sessions/${session.id}/questions`}
+          className="focus-ring rounded-full bg-gold px-4 py-2 text-sm font-bold text-ink shadow-[0_4px_12px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5"
         >
-          Тіркеу ашық: {session.is_active ? "Иә" : "Жоқ"}
-        </button>
+          Сұрақтарды енгізу →
+        </a>
         <button
           onClick={() => updateSessionField("is_checking", !session.is_checking)}
           className={`focus-ring rounded-full border px-4 py-2 text-sm font-medium ${
@@ -320,21 +249,13 @@ export default function AdminSessionDetailPage() {
         >
           Нәтиже дайын: {session.has_results ? "Иә" : "Жоқ"}
         </button>
-      </div>
-
-      <div className="mt-6 flex flex-wrap gap-3">
-        <button
-          onClick={exportExcel}
-          className="focus-ring rounded-full bg-admin px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+        <a
+          href={`/admin/sessions/${session.id}/results-preview`}
+          className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-sm font-medium text-ink/70 hover:bg-parchment"
         >
-          Excel-ге жүктеу
-        </button>
-        <label className="focus-ring cursor-pointer rounded-full border border-admin px-5 py-2.5 text-sm font-semibold text-admin hover:bg-admin-soft">
-          Excel-ден жүктеу (аудитория/орын/вариант)
-          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
-        </label>
+          Алдын ала қарау
+        </a>
       </div>
-      {importMessage && <p className="mt-2 text-sm text-ink/60">{importMessage}</p>}
 
       <div className="mt-8">
         <h2 className="font-display text-lg font-bold text-ink">
