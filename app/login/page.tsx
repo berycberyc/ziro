@@ -12,11 +12,30 @@ export default function LoginPage() {
   const router = useRouter();
 
   async function handleLogin(values: Record<string, string>) {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: values.email,
       password: values.password,
     });
     if (error) throw error;
+
+    const userId = data.user?.id;
+    if (userId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single();
+
+      if (profile?.role === "admin") {
+        router.push("/admin");
+        return;
+      }
+      if (profile?.role === "teacher") {
+        router.push("/teacher");
+        return;
+      }
+    }
+
     router.push("/dashboard");
   }
 

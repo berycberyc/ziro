@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { SUBJECT_LABELS, QUANTITY_CHOICE_LABELS, type SubjectKey } from "@/lib/questions/subjects";
+import MathText from "@/components/MathText";
 
 type Choice = { text_kk: string; text_ru: string; correct: boolean };
 type Question = {
@@ -90,16 +91,18 @@ export default function QuestionPreviewPage() {
             <div key={q.id}>
               {showPassage && q.passage_id && passages[q.passage_id] && (
                 <div className="mb-3 rounded-2xl border border-ink/10 bg-parchment p-4 text-sm leading-relaxed text-ink/80 whitespace-pre-line">
-                  {passages[q.passage_id].passage_text}
+                  <MathText text={passages[q.passage_id].passage_text} />
                 </div>
               )}
 
               <div className="rounded-2xl border border-ink/10 bg-white p-4">
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-ink">
-                    {q.question_number}. {q.text_kk}
+                    {q.question_number}. <MathText text={q.text_kk ?? ""} />
                     {q.text_ru && q.text_ru !== q.text_kk && (
-                      <span className="block text-sm text-ink/50">{q.text_ru}</span>
+                      <span className="block text-sm text-ink/50">
+                        <MathText text={q.text_ru} />
+                      </span>
                     )}
                   </p>
                   {q.topics && (
@@ -118,7 +121,7 @@ export default function QuestionPreviewPage() {
                         key={i}
                         className={`text-sm ${c.correct ? "font-semibold text-parent" : "text-ink/70"}`}
                       >
-                        {LETTERS[i]}) {c.text_kk} {c.correct && "✓"}
+                        {LETTERS[i]}) <MathText text={c.text_kk} /> {c.correct && "✓"}
                       </p>
                     ))}
                   </div>
@@ -135,11 +138,11 @@ export default function QuestionPreviewPage() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-lg border border-ink/10 p-2">
                         <p className="text-xs text-ink/40">А бағаны</p>
-                        {q.column_a_kk}
+                        <MathText text={q.column_a_kk ?? ""} />
                       </div>
                       <div className="rounded-lg border border-ink/10 p-2">
                         <p className="text-xs text-ink/40">В бағаны</p>
-                        {q.column_b_kk}
+                        <MathText text={q.column_b_kk ?? ""} />
                       </div>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-parent">

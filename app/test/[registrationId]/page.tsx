@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
 import { SUBJECT_LABELS, SUBJECT_MINUTES, QUANTITY_CHOICE_LABELS, type SubjectKey } from "@/lib/questions/subjects";
+import MathText from "@/components/MathText";
 
 type QuestionPublic = {
   id: string;
@@ -355,13 +356,13 @@ export default function TestTakingPage() {
 
       {passageText && (
         <div className="mb-4 rounded-2xl border border-ink/10 bg-parchment p-5 text-sm leading-relaxed text-ink/80 whitespace-pre-line">
-          {passageText}
+          <MathText text={passageText} />
         </div>
       )}
 
       <div className="rounded-2xl border border-ink/10 bg-white p-5">
         <p className="font-medium text-ink">
-          {qIndex + 1}. {lang === "kk" ? q.text_kk : q.text_ru}
+          {qIndex + 1}. <MathText text={(lang === "kk" ? q.text_kk : q.text_ru) ?? ""} />
         </p>
         {q.image_url && <img src={q.image_url} alt="" className="my-3 max-w-xs" />}
 
@@ -390,7 +391,7 @@ export default function TestTakingPage() {
                     selected ? "border-gold bg-gold/10 font-semibold text-ink" : "border-ink/15 hover:bg-parchment"
                   }`}
                 >
-                  <span className="font-mono">{letter})</span> {lang === "kk" ? c.text_kk : c.text_ru}
+                  <span className="font-mono">{letter})</span> <MathText text={(lang === "kk" ? c.text_kk : c.text_ru) ?? ""} />
                 </button>
               );
             })}
@@ -402,11 +403,11 @@ export default function TestTakingPage() {
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-ink/10 p-3 text-sm">
                 <p className="mb-1 font-mono text-xs font-semibold text-ink/40">А бағаны</p>
-                {lang === "kk" ? q.column_a_kk : q.column_a_ru}
+                <MathText text={(lang === "kk" ? q.column_a_kk : q.column_a_ru) ?? ""} />
               </div>
               <div className="rounded-xl border border-ink/10 p-3 text-sm">
                 <p className="mb-1 font-mono text-xs font-semibold text-ink/40">В бағаны</p>
-                {lang === "kk" ? q.column_b_kk : q.column_b_ru}
+                <MathText text={(lang === "kk" ? q.column_b_kk : q.column_b_ru) ?? ""} />
               </div>
             </div>
             <div className="mt-3 flex flex-col gap-2">
