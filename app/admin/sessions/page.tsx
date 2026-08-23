@@ -52,7 +52,7 @@ export default function AdminSessionsPage() {
         onChange={(e) => handleSelect(e.target.value)}
         className="focus-ring mt-4 w-full max-w-md rounded-xl border border-ink/15 px-3 py-2 text-sm"
       >
-        <option value="">— пробный тестті таңдау —</option>
+        <option value="">— байқау тестті таңдау —</option>
         {sessions.map((s) => (
           <option key={s.id} value={s.id}>
             {s.title_kk} / {s.title_ru} — {s.session_date}

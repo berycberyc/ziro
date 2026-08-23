@@ -73,8 +73,14 @@ export default function EditStudentForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError("");
+
+    if (!photoFile && !student.photo_url) {
+      setError("Суретті жүктеу міндетті.");
+      return;
+    }
+
+    setLoading(true);
 
     let photoUrl = student.photo_url;
 
@@ -192,12 +198,14 @@ export default function EditStudentForm({
         ))}
       </select>
       <input
+        required
         placeholder={t.schoolPlaceholder}
         className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
         value={school}
         onChange={(e) => setSchool(e.target.value)}
       />
       <input
+        required
         placeholder={t.iinPlaceholder}
         className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
         value={iin}

@@ -86,7 +86,7 @@ export default function MonitoringPage() {
         onChange={(e) => setSelectedId(e.target.value)}
         className="focus-ring mt-4 w-full max-w-md rounded-xl border border-ink/15 px-3 py-2 text-sm"
       >
-        <option value="">— пробный тестті таңдау —</option>
+        <option value="">— байқау тестті таңдау —</option>
         {trialTests.map((t) => (
           <option key={t.id} value={t.id}>
             {t.title_kk} / {t.title_ru} — {t.session_date}
@@ -94,7 +94,7 @@ export default function MonitoringPage() {
         ))}
       </select>
 
-      {!selectedId && <p className="mt-6 text-sm text-ink/50">Алдымен пробный тест таңдаңыз.</p>}
+      {!selectedId && <p className="mt-6 text-sm text-ink/50">Алдымен байқау тест таңдаңыз.</p>}
       {selectedId && loading && <p className="mt-6 text-sm text-ink/50">Жүктелуде...</p>}
 
       {selectedId && !loading && stage === "not_open" && (

@@ -81,14 +81,15 @@ export default function BookingForm({
         {bookedWaitingPayment ? (
           <div className="mt-4 flex flex-col gap-4">
             <div className="rounded-xl bg-parent-soft px-4 py-3 text-sm text-parent">
-              Брондау сәтті өтті. Төлемді растау үшін төмендегі деректер бойынша хабарласыңыз:
+              Брондау сәтті өтті!
             </div>
             <div className="rounded-xl bg-parchment px-4 py-3 text-sm leading-relaxed text-ink/70">
-              [Толтырылады: телефон нөмірі / Kaspi нөмірі / банк реквизиттері]
+              Төлеу үшін «Брондаулар» бөліміне өтіңіз — сол жерде осы брондаудың Kaspi QR-коды және
+              төлейтін сома көрсетіледі. Төлегеннен кейін сол жерден түбіртекті жіберіңіз.
             </div>
             <button
               onClick={onBooked}
-              className="focus-ring rounded-full bg-parent px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+              className="focus-ring rounded-full bg-gold px-4 py-2.5 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5"
             >
               Түсінікті
             </button>
@@ -182,7 +183,7 @@ export default function BookingForm({
           {error && <p className="text-sm text-red-600">Қате шықты, қайта көріңіз.</p>}
           {duplicateError && (
             <p className="text-sm text-red-600">
-              Бұл оқушы осы пробный тестке бұрын тіркелген. Бір оқушы бір пробный тестке тек бір рет
+              Бұл оқушы осы байқау тестке бұрын тіркелген. Бір оқушы бір байқау тестке тек бір рет
               тіркеле алады.
             </p>
           )}

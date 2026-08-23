@@ -187,6 +187,17 @@ export default function BookingsPage() {
     setDownloadingId(id);
     setDownloadError("");
 
+    const b = bookings.find((row) => row.id === id);
+    if (b?.student?.photo_url) {
+      await new Promise<void>((resolve) => {
+        const preload = new Image();
+        preload.crossOrigin = "anonymous";
+        preload.onload = () => resolve();
+        preload.onerror = () => resolve();
+        preload.src = b.student!.photo_url!;
+      });
+    }
+
     try {
       await waitForImages(node);
       const { default: html2canvas } = await import("html2canvas");
@@ -491,19 +502,12 @@ export default function BookingsPage() {
                       overflow: "hidden",
                       border: "4px solid #F3F5F2",
                       boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-                      background: "#d9d9d9",
+                      background: b.student?.photo_url
+                        ? `#d9d9d9 url(${b.student.photo_url}) center / cover no-repeat`
+                        : "#d9d9d9",
                       marginBottom: "28px",
                     }}
-                  >
-                    {b.student?.photo_url && (
-                      <img
-                        src={b.student.photo_url}
-                        alt={b.student.full_name}
-                        crossOrigin="anonymous"
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    )}
-                  </div>
+                  />
 
                   <p style={{ fontSize: "30px", fontWeight: 800, color: "#16233F", margin: "0 0 8px 0", textAlign: "center" }}>
                     {b.student?.full_name}
