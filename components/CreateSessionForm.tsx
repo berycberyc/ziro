@@ -95,20 +95,25 @@ export default function CreateSessionForm({
           value={titleRu}
           onChange={(e) => setTitleRu(e.target.value)}
         />
-        <input
-          required
-          type="date"
-          className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
-          value={sessionDate}
-          onChange={(e) => setSessionDate(e.target.value)}
-        />
-        <input
-          type="time"
-          placeholder="Басталу уақыты"
-          className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-        />
+        <div>
+          <label className="mb-1 block text-xs font-medium text-ink/50">Тест күні</label>
+          <input
+            required
+            type="date"
+            className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            value={sessionDate}
+            onChange={(e) => setSessionDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-ink/50">Басталу уақыты</label>
+          <input
+            type="time"
+            className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+          />
+        </div>
         <input
           placeholder="Мекенжайы / Адрес"
           className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm sm:col-span-2"
