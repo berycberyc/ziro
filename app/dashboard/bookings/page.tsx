@@ -424,7 +424,7 @@ export default function BookingsPage() {
                     style={{ borderRadius: "16px", background: "#fff", padding: "10px", border: "1px solid #15181e1a", marginBottom: "32px" }}
                   />
 
-                  <div style={{ width: "100%", height: "1px", background: "linear-gradient(to right, transparent, #C69A3A55, transparent)", marginBottom: "28px" }} />
+                  <div style={{ width: "100%", height: "1px", background: "rgba(198,154,58,0.35)", marginBottom: "28px" }} />
 
                   <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
