@@ -356,11 +356,17 @@ export default function BookingsPage() {
               ) : (
                 <div className="p-5">
                   <div className="flex flex-wrap items-center gap-4">
-                    <img
-                      src="/kaspi-qr.png"
-                      alt="Kaspi QR"
-                      className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm"
-                    />
+                    <a
+                      href="https://qr.kaspi.kz/1199806411750970251502354288835494391255"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img
+                        src="/kaspi-qr.png"
+                        alt="Kaspi QR"
+                        className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm transition-transform hover:scale-[1.02]"
+                      />
+                    </a>
                     <div className="flex-1">
                       <p className="text-sm text-ink/70">{t.passWaitingPayment}</p>
                       <p className="mt-1 font-mono text-sm">
