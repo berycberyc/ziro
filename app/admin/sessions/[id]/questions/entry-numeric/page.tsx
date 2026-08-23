@@ -267,6 +267,7 @@ export default function NumericQuestionEntryPage() {
           <label className="text-xs font-semibold text-ink/50">Сурет (міндетті емес)</label>
           <div className="mt-1 flex items-center gap-3">
             <input
+              key={questionNumber}
               type="file"
               accept="image/*"
               onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}

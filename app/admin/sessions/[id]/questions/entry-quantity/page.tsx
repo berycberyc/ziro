@@ -296,6 +296,7 @@ export default function QuantityQuestionEntryPage() {
           )}
           <div className="mt-2 flex items-center gap-3">
             <input
+              key={questionNumber}
               type="file"
               accept="image/*"
               onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}

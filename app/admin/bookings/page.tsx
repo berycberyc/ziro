@@ -8,6 +8,7 @@ type Booking = {
   payment_status: string;
   student_id: string;
   parent_id: string;
+  receipt_url: string | null;
   students: {
     full_name: string;
     iin: string | null;
@@ -52,7 +53,7 @@ export default function BookingsPage() {
       .from("registrations")
       .select(
         `
-        id, payment_status, student_id, parent_id,
+        id, payment_status, student_id, parent_id, receipt_url,
         students ( full_name, iin, grade, region, city, school, language ),
         test_types ( name_kk, name_ru )
         `
@@ -102,6 +103,21 @@ export default function BookingsPage() {
               {b.test_types?.name_kk} / {b.test_types?.name_ru}
             </p>
           </button>
+
+          {b.receipt_url && (
+            <a
+              href={b.receipt_url}
+              target="_blank"
+              rel="noreferrer"
+              title="Түбіртекті қарау"
+              className="focus-ring shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-gold/15 text-gold-deep hover:bg-gold/25"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 2H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h5m0-20h9a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H9m0-20v20" />
+                <path d="M13 8h4M13 12h4M13 16h4" strokeLinecap="round" />
+              </svg>
+            </a>
+          )}
 
           {b.payment_status === "paid" ? (
             <button

@@ -15,6 +15,7 @@ type Registration = {
   student_id: string;
   test_type_id: string;
   test_session_id: string;
+  receipt_url: string | null;
 };
 
 type StudentInfo = { id: string; full_name: string; photo_url: string | null; zipgrade_id: string | null; iin: string | null };
@@ -26,6 +27,7 @@ type SessionInfo = {
   session_date: string;
   start_time: string | null;
   address: string | null;
+  price: number;
   has_results: boolean;
   is_checking: boolean;
 };
@@ -59,7 +61,7 @@ export default function BookingsPage() {
       const { data: regs, error: regsError } = await supabase
         .from("registrations")
         .select(
-          "id, short_code, format, payment_status, classroom, test_variant, student_id, test_type_id, test_session_id"
+          "id, short_code, format, payment_status, classroom, test_variant, student_id, test_type_id, test_session_id, receipt_url"
         )
         .eq("parent_id", userData.user.id)
         .order("created_at", { ascending: false });
@@ -87,7 +89,7 @@ export default function BookingsPage() {
         supabase.from("test_types").select("id, code, name_kk, name_ru").in("id", testTypeIds),
         supabase
           .from("test_sessions")
-          .select("id, title_kk, title_ru, session_date, start_time, address, has_results, is_checking")
+          .select("id, title_kk, title_ru, session_date, start_time, address, price, has_results, is_checking")
           .in("id", sessionIds),
       ]);
 
@@ -140,6 +142,8 @@ export default function BookingsPage() {
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState("");
+  const [uploadingReceiptId, setUploadingReceiptId] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState("");
 
   async function waitForImages(node: HTMLElement) {
     const imgs = Array.from(node.querySelectorAll("img"));
@@ -205,6 +209,38 @@ export default function BookingsPage() {
       setDownloadError("Пропускты жүктеу кезінде қате шықты. Қайта көріңіз.");
     } finally {
       setDownloadingId(null);
+    }
+  }
+
+  async function handleReceiptUpload(registrationId: string, file: File) {
+    setUploadingReceiptId(registrationId);
+    setReceiptError("");
+
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `${registrationId}/${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage.from("receipts").upload(path, file, {
+        upsert: true,
+      });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from("receipts").getPublicUrl(path);
+
+      const { error: updateError } = await supabase
+        .from("registrations")
+        .update({ receipt_url: publicUrlData.publicUrl })
+        .eq("id", registrationId);
+      if (updateError) throw updateError;
+
+      setBookings((prev) =>
+        prev.map((b) => (b.id === registrationId ? { ...b, receipt_url: publicUrlData.publicUrl } : b))
+      );
+    } catch (err) {
+      console.error("Receipt upload failed:", err);
+      setReceiptError("Түбіртекті жүктеу кезінде қате шықты. Қайта көріңіз.");
+    } finally {
+      setUploadingReceiptId(null);
     }
   }
 
@@ -318,7 +354,65 @@ export default function BookingsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-5 text-sm text-ink/50">{t.passWaitingPayment}</div>
+                <div className="p-5">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <img
+                      src="/kaspi-qr.png"
+                      alt="Kaspi QR"
+                      className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm text-ink/70">{t.passWaitingPayment}</p>
+                      <p className="mt-1 font-mono text-sm">
+                        Сомасы:{" "}
+                        <span className="font-semibold text-gold-deep">
+                          {b.session?.price?.toLocaleString("ru-RU")} ₸
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 border-t border-ink/10 pt-4">
+                    {b.receipt_url ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <a
+                          href={b.receipt_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 rounded-full bg-parent-soft px-4 py-2 text-sm font-semibold text-parent hover:opacity-90"
+                        >
+                          Түбіртек жіберілді ✓
+                        </a>
+                        <label className="focus-ring cursor-pointer rounded-full border border-ink/15 px-4 py-2 text-sm font-medium text-ink/60 hover:bg-parchment">
+                          {uploadingReceiptId === b.id ? "Жүктелуде..." : "Ауыстыру"}
+                          <input
+                            key={b.id}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingReceiptId === b.id}
+                            onChange={(e) => e.target.files?.[0] && handleReceiptUpload(b.id, e.target.files[0])}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5">
+                        {uploadingReceiptId === b.id ? "Жүктелуде..." : "Түбіртекті жіберу"}
+                        <input
+                          key={b.id}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadingReceiptId === b.id}
+                          onChange={(e) => e.target.files?.[0] && handleReceiptUpload(b.id, e.target.files[0])}
+                        />
+                      </label>
+                    )}
+                    {receiptError && uploadingReceiptId === null && (
+                      <p className="mt-2 text-xs text-red-600">{receiptError}</p>
+                    )}
+                  </div>
+                </div>
               )}
 
               {b.session?.has_results && (
