@@ -355,18 +355,23 @@ export default function BookingsPage() {
                 </div>
               ) : (
                 <div className="p-5">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <a
-                      href="https://qr.kaspi.kz/1199806411750970251502354288835494391255"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <img
-                        src="/kaspi-qr.png"
-                        alt="Kaspi QR"
-                        className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm transition-transform hover:scale-[1.02]"
-                      />
-                    </a>
+                  <div className="flex flex-wrap items-start gap-4">
+                    <div className="flex flex-col items-center">
+                      <a
+                        href="https://qr.kaspi.kz/1199806411750970251502354288835494391255"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <img
+                          src="/kaspi-qr.png"
+                          alt="Kaspi QR"
+                          className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm transition-transform hover:scale-[1.02]"
+                        />
+                      </a>
+                      <p className="mt-1.5 max-w-[130px] text-center text-[11px] leading-tight text-ink/50">
+                        Телефонмен сканерлеңіз немесе осында басыңыз
+                      </p>
+                    </div>
                     <div className="flex-1">
                       <p className="text-sm text-ink/70">{t.passWaitingPayment}</p>
                       <p className="mt-1 font-mono text-sm">
@@ -374,6 +379,9 @@ export default function BookingsPage() {
                         <span className="font-semibold text-gold-deep">
                           {b.session?.price?.toLocaleString("ru-RU")} ₸
                         </span>
+                      </p>
+                      <p className="mt-2 text-xs text-ink/50">
+                        Жоғарыдағы QR-кодты Kaspi қосымшасымен сканерлеп, көрсетілген соманы төлеңіз.
                       </p>
                     </div>
                   </div>
@@ -519,9 +527,17 @@ export default function BookingsPage() {
                   <img
                     src={qrDataUrl}
                     alt="QR"
-                    width={210}
-                    height={210}
-                    style={{ borderRadius: "16px", background: "#fff", padding: "10px", border: "1px solid #15181e1a", marginBottom: "32px" }}
+                    style={{
+                      width: "210px",
+                      height: "210px",
+                      borderRadius: "16px",
+                      background: "#fff",
+                      padding: "10px",
+                      border: "1px solid #15181e1a",
+                      marginBottom: "32px",
+                      objectFit: "contain",
+                      boxSizing: "border-box",
+                    }}
                   />
 
                   <div style={{ width: "100%", height: "1px", background: "rgba(198,154,58,0.35)", marginBottom: "28px" }} />
