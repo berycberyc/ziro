@@ -343,7 +343,7 @@ function ResultCard({
       <div className="min-w-0 flex-1">
         <p className="font-display text-lg font-bold text-ink">{row.student?.full_name}</p>
         <p className="text-sm text-ink/60">{testTypeName}</p>
-        <p className="text-sm text-ink/60">
+        <p className="font-mono text-sm text-ink/60">
           {t.roomLabel}: {row.classroom ?? "—"} · {t.scanSeatLabel}: {row.seat ?? "—"}
         </p>
         {tone === "already" && row.checked_in_at && (

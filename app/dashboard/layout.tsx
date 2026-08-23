@@ -46,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       accent="parent"
       topRight={
         <>
-          <span className="text-sm text-ink/50">{email}</span>
+          <span className="font-mono text-xs text-ink/50">{email}</span>
           <LanguageSwitcher lang={lang} onChange={setLang} />
           <button
             onClick={handleLogout}

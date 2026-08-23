@@ -48,7 +48,7 @@ export default function KiruPage() {
             placeholder="Брондау нөмірі"
             value={shortCode}
             onChange={(e) => setShortCode(e.target.value)}
-            className="focus-ring rounded-xl border border-ink/15 px-4 py-2.5 text-sm uppercase"
+            className="focus-ring rounded-xl border border-ink/15 px-4 py-2.5 font-mono text-sm uppercase"
           />
           <input
             required
@@ -56,7 +56,7 @@ export default function KiruPage() {
             value={zipgradeId}
             onChange={(e) => setZipgradeId(e.target.value.replace(/[^\d]/g, ""))}
             inputMode="numeric"
-            className="focus-ring rounded-xl border border-ink/15 px-4 py-2.5 text-sm"
+            className="focus-ring rounded-xl border border-ink/15 px-4 py-2.5 font-mono text-sm"
           />
         </div>
 
@@ -65,7 +65,7 @@ export default function KiruPage() {
         <button
           type="submit"
           disabled={loading}
-          className="focus-ring mt-5 w-full rounded-full bg-parent px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
         >
           {loading ? "Тексерілуде..." : "Кіру"}
         </button>

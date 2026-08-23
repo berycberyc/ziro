@@ -217,20 +217,20 @@ export default function BookingsPage() {
               data-id={b.id}
               className="overflow-hidden rounded-3xl border border-ink/10 bg-white shadow-sm"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ink/10 bg-parent-soft/30 px-5 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3 bg-ink px-5 py-4">
                 <div className="flex items-center gap-3">
                   {b.student?.photo_url ? (
                     <img
                       src={b.student.photo_url}
                       alt={b.student.full_name}
-                      className="h-12 w-12 rounded-full object-cover ring-2 ring-white shadow"
+                      className="h-12 w-12 rounded-full object-cover ring-2 ring-gold/40"
                     />
                   ) : (
-                    <div className="h-12 w-12 rounded-full bg-parent-soft" />
+                    <div className="h-12 w-12 rounded-full bg-ink-soft" />
                   )}
                   <div>
-                    <p className="font-display text-lg font-bold text-ink">{b.student?.full_name}</p>
-                    <p className="text-sm text-ink/60">{testTypeName}</p>
+                    <p className="font-display text-lg font-bold text-parchment">{b.student?.full_name}</p>
+                    <p className="font-mono text-xs text-[#B9C1D0]">{testTypeName}</p>
                   </div>
                 </div>
                 <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${status.color}`}>
@@ -251,19 +251,19 @@ export default function BookingsPage() {
                   </div>
                   <div className="space-y-2 text-sm text-ink/80">
                     <p>
-                      <span className="font-semibold text-ink">{sessionTitle}</span>
+                      <span className="font-display font-semibold text-ink">{sessionTitle}</span>
                     </p>
-                    <p>
+                    <p className="font-mono text-xs text-ink/60">
                       {t.dateLabel}: {b.session?.session_date}
-                      {b.session?.start_time ? `, ${t.timeLabel.toLowerCase()}: ${b.session.start_time}` : ""}
+                      {b.session?.start_time ? ` · ${b.session.start_time}` : ""}
                     </p>
                     {b.session?.address && (
-                      <p>
+                      <p className="font-mono text-xs text-ink/60">
                         {t.addressLabel}: {b.session.address}
                       </p>
                     )}
                     {b.classroom && (
-                      <p className="font-semibold text-ink">
+                      <p className="font-mono text-xs font-semibold text-gold-deep">
                         {t.roomLabel}: {b.classroom}
                       </p>
                     )}
@@ -339,12 +339,13 @@ export default function BookingsPage() {
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "36px" }}>
                     <img src="/logo.jpg" alt="Ziro" style={{ width: "44px", height: "44px", borderRadius: "10px", objectFit: "cover" }} />
-                    <span style={{ fontSize: "22px", fontWeight: 800, color: "#151A2E", letterSpacing: "-0.02em" }}>
-                      Ziro
+                    <span style={{ fontSize: "22px", fontWeight: 700, letterSpacing: "-0.02em" }}>
+                      <span style={{ color: "#16233F" }}>zi</span>
+                      <span style={{ color: "#A87F26" }}>ro</span>
                     </span>
                   </div>
 
-                  <p style={{ fontSize: "13px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#B48A2E", margin: "0 0 28px 0", fontWeight: 700 }}>
+                  <p style={{ fontSize: "13px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#A87F26", margin: "0 0 28px 0", fontWeight: 700 }}>
                     {t.passLabel}
                   </p>
 
@@ -354,7 +355,7 @@ export default function BookingsPage() {
                       height: "280px",
                       borderRadius: "16px",
                       overflow: "hidden",
-                      border: "4px solid #F6F4EE",
+                      border: "4px solid #F3F5F2",
                       boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
                       background: "#d9d9d9",
                       marginBottom: "28px",
@@ -370,23 +371,23 @@ export default function BookingsPage() {
                     )}
                   </div>
 
-                  <p style={{ fontSize: "30px", fontWeight: 800, color: "#151A2E", margin: "0 0 8px 0", textAlign: "center" }}>
+                  <p style={{ fontSize: "30px", fontWeight: 800, color: "#16233F", margin: "0 0 8px 0", textAlign: "center" }}>
                     {b.student?.full_name}
                   </p>
                   <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 4px 0", textAlign: "center" }}>
                     {t.studentIdLabel}:{" "}
-                    <span style={{ fontWeight: 700, color: "#151A2E" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>
                       {b.student?.zipgrade_id ?? "—"}
                     </span>
                   </p>
                   {b.student?.iin && (
                     <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 4px 0", textAlign: "center" }}>
-                      {t.iinLabel}: <span style={{ fontWeight: 700, color: "#151A2E" }}>{b.student.iin}</span>
+                      {t.iinLabel}: <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>{b.student.iin}</span>
                     </p>
                   )}
                   <p style={{ fontSize: "14px", color: "#8a8a8a", margin: "0 0 32px 0", textAlign: "center" }}>
                     {t.bookingNumberLabel}:{" "}
-                    <span style={{ fontWeight: 700, color: "#151A2E" }}>{b.short_code ?? "—"}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>{b.short_code ?? "—"}</span>
                   </p>
 
                   <img
@@ -398,22 +399,22 @@ export default function BookingsPage() {
                     style={{ borderRadius: "16px", background: "#fff", padding: "10px", border: "1px solid #15181e1a", marginBottom: "32px" }}
                   />
 
-                  <div style={{ width: "100%", height: "1px", background: "linear-gradient(to right, transparent, #D6A83A55, transparent)", marginBottom: "28px" }} />
+                  <div style={{ width: "100%", height: "1px", background: "linear-gradient(to right, transparent, #C69A3A55, transparent)", marginBottom: "28px" }} />
 
                   <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
                       <span style={{ color: "#8a8a8a" }}>{t.testTypeLabel}</span>
-                      <span style={{ fontWeight: 700, color: "#151A2E" }}>{testTypeName}</span>
+                      <span style={{ fontWeight: 700, color: "#16233F" }}>{testTypeName}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
                       <span style={{ color: "#8a8a8a" }}>{t.sessionLabel}</span>
-                      <span style={{ fontWeight: 700, color: "#151A2E", textAlign: "right" }}>{sessionTitle}</span>
+                      <span style={{ fontWeight: 700, color: "#16233F", textAlign: "right" }}>{sessionTitle}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
                       <span style={{ color: "#8a8a8a" }}>
                         {t.dateLabel} / {t.timeLabel}
                       </span>
-                      <span style={{ fontWeight: 700, color: "#151A2E" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "#16233F" }}>
                         {b.session?.session_date}
                         {b.session?.start_time ? `, ${b.session.start_time}` : ""}
                       </span>
@@ -421,12 +422,12 @@ export default function BookingsPage() {
                     {b.session?.address && (
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
                         <span style={{ color: "#8a8a8a" }}>{t.addressLabel}</span>
-                        <span style={{ fontWeight: 700, color: "#151A2E", textAlign: "right" }}>{b.session.address}</span>
+                        <span style={{ fontWeight: 700, color: "#16233F", textAlign: "right" }}>{b.session.address}</span>
                       </div>
                     )}
                   </div>
 
-                  <div style={{ marginTop: "32px", width: "100%", padding: "18px 22px", background: "#F6F4EE", borderRadius: "14px", fontSize: "13.5px", lineHeight: 1.7, color: "#5a5a5a" }}>
+                  <div style={{ marginTop: "32px", width: "100%", padding: "18px 22px", background: "#F3F5F2", borderRadius: "14px", fontSize: "13.5px", lineHeight: 1.7, color: "#5a5a5a" }}>
                     {b.format === "online" ? (
                       <>
                         <p style={{ margin: 0 }}>{t.passOnlineNote1}</p>

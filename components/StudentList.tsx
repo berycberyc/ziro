@@ -64,20 +64,22 @@ export default function StudentList({
         ) : (
           <div
             key={s.id}
-            className="flex flex-wrap items-center gap-3 rounded-xl border border-ink/10 bg-white px-4 py-3"
+            className="flex flex-wrap items-center gap-3 rounded-2xl border border-ink/10 bg-white px-4 py-3.5 shadow-sm transition-shadow hover:shadow-md"
           >
             {s.photo_url ? (
               <img
                 src={s.photo_url}
                 alt={s.full_name}
-                className="h-10 w-10 shrink-0 rounded-full object-cover"
+                className="h-11 w-11 shrink-0 rounded-full object-cover"
               />
             ) : (
-              <div className="h-10 w-10 shrink-0 rounded-full bg-parent-soft" />
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-parent-soft font-display text-sm font-bold text-parent">
+                {s.first_name?.[0] ?? s.full_name?.[0] ?? "?"}
+              </div>
             )}
             <div className="flex-1">
-              <span className="font-medium text-ink">{s.full_name}</span>
-              <span className="ml-2 text-xs text-ink/40">#{s.zipgrade_id ?? "—"}</span>
+              <span className="font-display font-semibold text-ink">{s.full_name}</span>
+              <span className="ml-2 font-mono text-xs text-ink/40">#{s.zipgrade_id ?? "—"}</span>
               <div className="text-sm text-ink/50">
                 {[s.grade, s.city, s.school].filter(Boolean).join(" · ")}
               </div>

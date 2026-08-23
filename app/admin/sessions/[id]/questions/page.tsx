@@ -107,11 +107,11 @@ export default function SessionQuestionsSelectorPage() {
             return (
               <div
                 key={subj}
-                className="flex items-center justify-between rounded-2xl border border-ink/10 bg-white p-4"
+                className="flex items-center justify-between rounded-2xl border border-ink/10 bg-white p-4 shadow-sm"
               >
                 <div>
-                  <p className="font-medium text-ink">{SUBJECT_LABELS[subj as SubjectKey]}</p>
-                  <p className={`text-xs ${complete ? "text-parent" : "text-ink/50"}`}>
+                  <p className="font-display font-semibold text-ink">{SUBJECT_LABELS[subj as SubjectKey]}</p>
+                  <p className={`font-mono text-xs ${complete ? "text-parent" : "text-ink/50"}`}>
                     {current} / {max} сұрақ {complete ? "— дайын" : ""}
                   </p>
                 </div>

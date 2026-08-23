@@ -31,16 +31,16 @@ export default function SessionsList({ sessions }: { sessions: Session[] }) {
           <Link
             key={s.id}
             href={`/admin/sessions/${s.id}`}
-            className="focus-ring flex items-center justify-between rounded-xl border border-ink/10 bg-white px-4 py-3 hover:border-admin/30"
+            className="focus-ring flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-white px-5 py-4 shadow-sm transition-shadow hover:shadow-md hover:border-admin/30"
           >
             <div>
-              <span className="font-medium text-ink">{s.title_kk}</span>
+              <span className="font-display font-semibold text-ink">{s.title_kk}</span>
               <span className="ml-2 text-sm text-ink/50">{s.title_ru}</span>
             </div>
-            <div className="flex items-center gap-3 text-sm text-ink/60">
+            <div className="flex items-center gap-3 font-mono text-xs text-ink/60">
               <span>{s.session_date}</span>
-              <span>{s.price.toLocaleString("ru-RU")} ₸</span>
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.color}`}>
+              <span className="font-semibold text-gold-deep">{s.price.toLocaleString("ru-RU")} ₸</span>
+              <span className={`rounded-full px-3 py-1 font-body text-xs font-semibold ${status.color}`}>
                 {status.text}
               </span>
             </div>

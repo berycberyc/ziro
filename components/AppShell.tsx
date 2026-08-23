@@ -12,12 +12,6 @@ const ACCENT_BG = {
   teacher: "bg-teacher",
 } as const;
 
-const ACCENT_SOFT = {
-  parent: "bg-parent-soft/50",
-  admin: "bg-admin-soft/50",
-  teacher: "bg-teacher-soft/50",
-} as const;
-
 export default function AppShell({
   navItems,
   accent,
@@ -32,6 +26,14 @@ export default function AppShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  function Logo() {
+    return (
+      <span className="font-display text-lg font-bold tracking-tight text-ink">
+        zi<span className="text-gold-deep">ro</span>
+      </span>
+    );
+  }
+
   function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
     return (
       <>
@@ -45,7 +47,7 @@ export default function AppShell({
               className={`focus-ring block rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
                 active
                   ? `${ACCENT_BG[accent]} text-white shadow-sm`
-                  : "text-ink/70 hover:bg-white/70"
+                  : "text-ink/65 hover:bg-ink/5"
               }`}
             >
               {item.label}
@@ -59,16 +61,14 @@ export default function AppShell({
   return (
     <div className="min-h-screen bg-parchment">
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-ink/10 bg-parchment/90 px-4 py-3 backdrop-blur sm:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-ink/10 bg-parchment/95 px-4 py-3 backdrop-blur sm:hidden">
         <Link href="/" className="flex items-center gap-2">
           <img
             src="/logo.jpg"
             alt="Ziro"
-            className="h-8 w-8 rounded-lg object-cover shadow-sm ring-1 ring-ink/10"
+            className="h-8 w-8 rounded-lg object-cover"
           />
-          <span className="font-display text-lg font-extrabold tracking-tight text-ink">
-            Ziro
-          </span>
+          <Logo />
         </Link>
         <button
           onClick={() => setOpen(true)}
@@ -85,7 +85,7 @@ export default function AppShell({
       {open && (
         <div className="fixed inset-0 z-50 sm:hidden">
           <div
-            className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-ink/50 backdrop-blur-[2px]"
             onClick={() => setOpen(false)}
           />
           <div className="absolute left-0 top-0 flex h-full w-72 max-w-[80%] flex-col gap-1 bg-parchment p-4 shadow-2xl">
@@ -94,11 +94,9 @@ export default function AppShell({
                 <img
                   src="/logo.jpg"
                   alt="Ziro"
-                  className="h-8 w-8 rounded-lg object-cover shadow-sm ring-1 ring-ink/10"
+                  className="h-8 w-8 rounded-lg object-cover"
                 />
-                <span className="font-display text-lg font-extrabold tracking-tight text-ink">
-                  Ziro
-                </span>
+                <Logo />
               </Link>
               <button
                 onClick={() => setOpen(false)}
@@ -117,18 +115,14 @@ export default function AppShell({
 
       <div className="flex">
         {/* Desktop sidebar */}
-        <nav
-          className={`sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 border-r border-ink/10 ${ACCENT_SOFT[accent]} p-4 sm:flex`}
-        >
+        <nav className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 border-r border-ink/10 bg-white p-4 sm:flex">
           <Link href="/" className="mb-6 flex items-center gap-2 px-2 py-1">
             <img
               src="/logo.jpg"
               alt="Ziro"
-              className="h-9 w-9 rounded-lg object-cover shadow-sm ring-1 ring-ink/10"
+              className="h-9 w-9 rounded-lg object-cover"
             />
-            <span className="font-display text-xl font-extrabold tracking-tight text-ink">
-              Ziro
-            </span>
+            <Logo />
           </Link>
           <NavLinks />
         </nav>

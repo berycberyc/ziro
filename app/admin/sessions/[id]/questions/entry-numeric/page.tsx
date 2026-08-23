@@ -197,7 +197,7 @@ export default function NumericQuestionEntryPage() {
         >
           ← Алдыңғы
         </button>
-        <p className="text-sm text-ink/60">
+        <p className="font-mono text-sm text-ink/60">
           Сұрақ {questionNumber} / {max}
         </p>
         <button

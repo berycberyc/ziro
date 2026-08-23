@@ -51,10 +51,10 @@ export default function AuthForm({
         <img
           src="/logo.jpg"
           alt="Ziro"
-          className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-ink/10"
+          className="h-10 w-10 rounded-xl object-cover"
         />
-        <span className="font-display text-2xl font-extrabold tracking-tight text-ink">
-          Ziro
+        <span className="font-display text-2xl font-bold tracking-tight text-ink">
+          zi<span className="text-gold-deep">ro</span>
         </span>
       </Link>
 
@@ -81,7 +81,7 @@ export default function AuthForm({
           <button
             type="submit"
             disabled={loading}
-            className="focus-ring mt-2 rounded-full bg-ink px-6 py-3 text-sm font-semibold text-parchment shadow-sm transition-all hover:opacity-90 hover:shadow-md disabled:opacity-50"
+            className="focus-ring mt-2 rounded-full bg-gold px-6 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-50"
           >
             {submitLabel}
           </button>

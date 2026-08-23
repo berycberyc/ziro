@@ -277,7 +277,7 @@ export default function TestTakingPage() {
           <button
             onClick={handleConfirmConsent}
             disabled={!consentChecked}
-            className="focus-ring mt-5 w-full rounded-full bg-parent px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
           >
             Жалғастыру
           </button>
@@ -297,7 +297,7 @@ export default function TestTakingPage() {
               <p className="mt-1 font-display text-lg font-bold text-parent">
                 {currentSubject && SUBJECT_LABELS[currentSubject]}
               </p>
-              <p className="mt-4 font-display text-3xl font-bold text-teacher tabular-nums">
+              <p className="mt-4 font-mono text-3xl font-bold text-teacher tabular-nums">
                 {formatTime(secondsLeft)}
               </p>
             </>
@@ -313,7 +313,7 @@ export default function TestTakingPage() {
           )}
           <button
             onClick={handleStartSubject}
-            className="focus-ring mt-5 w-full rounded-full bg-parent px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+            className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5"
           >
             {phase === "break" ? "Келесі пәнге өту" : "Бастау"}
           </button>
@@ -344,11 +344,11 @@ export default function TestTakingPage() {
       <div className="sticky top-0 z-10 mb-6 flex items-center justify-between rounded-2xl border border-ink/10 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
         <div>
           <p className="font-display font-bold text-ink">{currentSubject && SUBJECT_LABELS[currentSubject]}</p>
-          <p className="text-xs text-ink/50">
+          <p className="font-mono text-xs text-ink/50">
             {qIndex + 1} / {questions.length}
           </p>
         </div>
-        <div className="font-display text-2xl font-bold text-teacher tabular-nums">
+        <div className="font-mono text-2xl font-bold text-teacher tabular-nums">
           {formatTime(secondsLeft)}
         </div>
       </div>
@@ -387,10 +387,10 @@ export default function TestTakingPage() {
                   disabled={confirmed}
                   onClick={() => setPendingChoice(letter)}
                   className={`focus-ring rounded-xl border px-4 py-2.5 text-left text-sm transition-colors disabled:opacity-60 ${
-                    selected ? "border-teacher bg-teacher-soft font-semibold text-teacher" : "border-ink/15 hover:bg-parchment"
+                    selected ? "border-gold bg-gold/10 font-semibold text-ink" : "border-ink/15 hover:bg-parchment"
                   }`}
                 >
-                  {letter}) {lang === "kk" ? c.text_kk : c.text_ru}
+                  <span className="font-mono">{letter})</span> {lang === "kk" ? c.text_kk : c.text_ru}
                 </button>
               );
             })}
@@ -401,11 +401,11 @@ export default function TestTakingPage() {
           <>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-ink/10 p-3 text-sm">
-                <p className="mb-1 text-xs font-semibold text-ink/40">А бағаны</p>
+                <p className="mb-1 font-mono text-xs font-semibold text-ink/40">А бағаны</p>
                 {lang === "kk" ? q.column_a_kk : q.column_a_ru}
               </div>
               <div className="rounded-xl border border-ink/10 p-3 text-sm">
-                <p className="mb-1 text-xs font-semibold text-ink/40">В бағаны</p>
+                <p className="mb-1 font-mono text-xs font-semibold text-ink/40">В бағаны</p>
                 {lang === "kk" ? q.column_b_kk : q.column_b_ru}
               </div>
             </div>
@@ -418,10 +418,10 @@ export default function TestTakingPage() {
                     disabled={confirmed}
                     onClick={() => setPendingChoice(letter)}
                     className={`focus-ring rounded-xl border px-4 py-2.5 text-left text-sm transition-colors disabled:opacity-60 ${
-                      selected ? "border-teacher bg-teacher-soft font-semibold text-teacher" : "border-ink/15 hover:bg-parchment"
+                      selected ? "border-gold bg-gold/10 font-semibold text-ink" : "border-ink/15 hover:bg-parchment"
                     }`}
                   >
-                    {letter}) {lang === "kk" ? QUANTITY_CHOICE_LABELS[letter].kk : QUANTITY_CHOICE_LABELS[letter].ru}
+                    <span className="font-mono">{letter})</span> {lang === "kk" ? QUANTITY_CHOICE_LABELS[letter].kk : QUANTITY_CHOICE_LABELS[letter].ru}
                   </button>
                 );
               })}
@@ -432,7 +432,7 @@ export default function TestTakingPage() {
         <button
           onClick={handleConfirmAnswer}
           disabled={confirmed || (q.answer_format === "numeric" ? !pendingNumeric : !pendingChoice)}
-          className="focus-ring mt-4 w-full rounded-full bg-parent px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="focus-ring mt-4 w-full rounded-full bg-gold px-5 py-2.5 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
         >
           {confirmed ? "Растайды..." : "Растау"}
         </button>

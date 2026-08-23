@@ -129,20 +129,25 @@ export default function MonitoringPage() {
             const paid = regs.filter((r) => r.payment_status === "paid");
             const arrived = paid.filter((r) => r.checked_in_at);
             return (
-              <div className="flex flex-wrap gap-3">
-                <span className="rounded-full bg-admin-soft px-4 py-2 text-sm font-semibold text-admin">
-                  Брондалған: {paid.length}
-                </span>
-                <span className="rounded-full bg-parent-soft px-4 py-2 text-sm font-semibold text-parent">
-                  Келді: {arrived.length}
-                </span>
-                <span className="rounded-full bg-teacher-soft px-4 py-2 text-sm font-semibold text-teacher">
-                  Қалды: {paid.length - arrived.length}
-                </span>
-                <span className="rounded-full bg-ink/5 px-4 py-2 text-sm text-ink/60">
-                  Онлайн: {paid.filter((r) => r.format === "online").length} · Офлайн:{" "}
-                  {paid.filter((r) => r.format === "offline").length}
-                </span>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-2xl border border-ink/10 bg-white p-4 text-center shadow-sm">
+                  <p className="font-display text-2xl font-bold text-admin">{paid.length}</p>
+                  <p className="mt-1 text-xs text-ink/50">Брондалған</p>
+                </div>
+                <div className="rounded-2xl border border-ink/10 bg-white p-4 text-center shadow-sm">
+                  <p className="font-display text-2xl font-bold text-parent">{arrived.length}</p>
+                  <p className="mt-1 text-xs text-ink/50">Келді</p>
+                </div>
+                <div className="rounded-2xl border border-ink/10 bg-white p-4 text-center shadow-sm">
+                  <p className="font-display text-2xl font-bold text-clay">{paid.length - arrived.length}</p>
+                  <p className="mt-1 text-xs text-ink/50">Қалды</p>
+                </div>
+                <div className="rounded-2xl border border-ink/10 bg-white p-4 text-center shadow-sm">
+                  <p className="font-mono text-sm font-semibold text-ink">
+                    {paid.filter((r) => r.format === "online").length} / {paid.filter((r) => r.format === "offline").length}
+                  </p>
+                  <p className="mt-1 text-xs text-ink/50">Онлайн / Офлайн</p>
+                </div>
               </div>
             );
           })()}
