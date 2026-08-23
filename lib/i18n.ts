@@ -43,7 +43,7 @@ export const dict = {
     online: "Онлайн",
     offline: "Офлайн",
     seats: "Бос орын",
-    book: "Тіркелу",
+    book: "Тестке жазылу",
     footerNote: "© Ziro. Барлық құқықтар қорғалған.",
     testNames: { NISH: "НЗМ", BIL: "БИЛ", RFMSH: "РФММ" },
     fullName: "Аты-жөні",

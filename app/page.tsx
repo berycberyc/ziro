@@ -92,10 +92,10 @@ export default function Home() {
           <div className="flex items-center gap-6">
             <LanguageSwitcher lang={lang} onChange={setLang} />
             <Link
-              href="/register"
+              href="/login"
               className="focus-ring rounded-full bg-gold px-5 py-2.5 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5"
             >
-              {t.ctaPrimary}
+              {t.ctaSecondary}
             </Link>
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function Home() {
                 href="/register"
                 className="focus-ring rounded-lg bg-gold px-6 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5"
               >
-                {t.book}
+                {t.ctaPrimary}
               </Link>
               <a
                 href="#exam-types"
@@ -196,7 +196,7 @@ export default function Home() {
                     disabled={!isOpen}
                     className="focus-ring rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-parchment shadow-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:bg-ink/20 disabled:text-ink/50 disabled:shadow-none"
                   >
-                    {isOpen ? t.book : t.registrationClosed}
+                    {isOpen ? t.ctaPrimary : t.registrationClosed}
                   </button>
                 </div>
               </div>
