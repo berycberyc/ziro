@@ -26,7 +26,7 @@ import {
 } from "@/lib/scoring/engine";
 import { NIS_SECTIONS, RFMSH_MAX, BIL_SECTIONS } from "@/lib/scoring/rules";
 
-type Session = { id: string; title: string; session_date: string };
+type Session = { id: string; title_kk: string; title_ru: string; session_date: string };
 type Mismatch = {
   subject: SubjectKey;
   variant: number;
@@ -58,7 +58,7 @@ export default function ScoringPage() {
   useEffect(() => {
     supabase
       .from("test_sessions")
-      .select("id, title, session_date")
+      .select("id, title_kk, title_ru, session_date")
       .order("session_date", { ascending: false })
       .then(({ data }) => {
         setSessions((data as Session[]) ?? []);
@@ -660,7 +660,7 @@ export default function ScoringPage() {
         <option value="">— Пробный тест таңдаңыз —</option>
         {sessions.map((s) => (
           <option key={s.id} value={s.id}>
-            {s.title} — {s.session_date}
+            {s.title_kk} / {s.title_ru} — {s.session_date}
           </option>
         ))}
       </select>
