@@ -25,6 +25,7 @@ export default function DevToolsPage() {
   const [copying, setCopying] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
   const [copyError, setCopyError] = useState("");
+  const [confirmingOverwrite, setConfirmingOverwrite] = useState(0);
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -66,7 +67,7 @@ export default function DevToolsPage() {
     }
   }
 
-  async function handleCopyVariant() {
+  async function handleCopyVariant(force: boolean = false) {
     if (!selectedId) return;
     if (sourceVariant === targetVariant) {
       setCopyError("Бастапқы және мақсатты нұсқа бірдей болмауы керек.");
@@ -78,13 +79,44 @@ export default function DevToolsPage() {
     setCopyError("");
 
     try {
+      if (!force) {
+        const { count: existingCount } = await supabase
+          .from("questions")
+          .select("id", { count: "exact", head: true })
+          .eq("session_id", selectedId)
+          .eq("subject", copySubject)
+          .eq("variant_number", targetVariant);
+
+        if (existingCount && existingCount > 0) {
+          setConfirmingOverwrite(existingCount);
+          setCopying(false);
+          return;
+        }
+      }
+      setConfirmingOverwrite(0);
+
+      // Force path (or target was already empty): clear out anything
+      // currently in the target variant before copying in the fresh set.
+      await supabase
+        .from("questions")
+        .delete()
+        .eq("session_id", selectedId)
+        .eq("subject", copySubject)
+        .eq("variant_number", targetVariant);
+      await supabase
+        .from("passages")
+        .delete()
+        .eq("session_id", selectedId)
+        .eq("subject", copySubject)
+        .eq("variant_number", targetVariant);
+
       const isPassageSubject = PASSAGE_SUBJECTS.includes(copySubject);
       let passageIdMap: Record<string, string> = {};
 
       if (isPassageSubject) {
         const { data: passages, error: passagesError } = await supabase
           .from("passages")
-          .select("id, passage_text, order_number")
+          .select("id, passage_text_kk, passage_text_ru, order_number")
           .eq("session_id", selectedId)
           .eq("subject", copySubject)
           .eq("variant_number", sourceVariant);
@@ -97,7 +129,8 @@ export default function DevToolsPage() {
               session_id: selectedId,
               subject: copySubject,
               variant_number: targetVariant,
-              passage_text: p.passage_text,
+              passage_text_kk: p.passage_text_kk,
+              passage_text_ru: p.passage_text_ru,
               order_number: p.order_number,
             })
             .select("id")
@@ -277,9 +310,32 @@ export default function DevToolsPage() {
           </select>
         </div>
 
+        {confirmingOverwrite > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-red-50 px-4 py-3">
+            <span className="text-sm text-red-700">
+              {targetVariant}-нұсқада бұл пән бойынша {confirmingOverwrite} сұрақ бар. Оларды өшіріп,
+              жаңасымен ауыстыру керек пе?
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleCopyVariant(true)}
+                className="focus-ring rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+              >
+                Иә, ауыстыру
+              </button>
+              <button
+                onClick={() => setConfirmingOverwrite(0)}
+                className="focus-ring rounded-full border border-ink/15 px-4 py-1.5 text-xs font-semibold text-ink hover:bg-white"
+              >
+                Бас тарту
+              </button>
+            </div>
+          </div>
+        )}
+
         <button
-          onClick={handleCopyVariant}
-          disabled={!selectedId || copying}
+          onClick={() => handleCopyVariant()}
+          disabled={!selectedId || copying || confirmingOverwrite > 0}
           className="focus-ring mt-4 rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
           {copying ? "Көшірілуде..." : "Көшіру"}
