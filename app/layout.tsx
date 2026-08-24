@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope, IBM_Plex_Mono } from "next/font/google";
 import { LangProvider } from "@/lib/LangContext";
 import "katex/dist/katex.min.css";
@@ -26,6 +26,14 @@ export const metadata: Metadata = {
   title: "Ziro — байқау тесттерге тіркелу порталы",
   description: "Ziro: НЗМ, БИЛ, РФММ байқау тесттері — тіркелу, төлем, нәтижелер",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "Ziro",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
   themeColor: "#16233F",
 };
 
