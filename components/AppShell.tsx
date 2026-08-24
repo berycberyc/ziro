@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export type NavItem = { href: string; label: string };
+export type NavItem = { href: string; label: string; danger?: boolean };
 
 const ACCENT_BG = {
   parent: "bg-parent",
@@ -45,9 +45,13 @@ export default function AppShell({
               href={item.href}
               onClick={onNavigate}
               className={`focus-ring block rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                active
-                  ? `${ACCENT_BG[accent]} text-white shadow-sm`
-                  : "text-ink/65 hover:bg-ink/5"
+                item.danger
+                  ? active
+                    ? "bg-red-600 text-white shadow-sm"
+                    : "text-red-600 hover:bg-red-50"
+                  : active
+                    ? `${ACCENT_BG[accent]} text-white shadow-sm`
+                    : "text-ink/65 hover:bg-ink/5"
               }`}
             >
               {item.label}

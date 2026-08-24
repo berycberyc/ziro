@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PushNotificationButton from "@/components/PushNotificationButton";
 
 type Booking = {
   id: string;
@@ -165,7 +166,10 @@ export default function BookingsPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-admin">Оплата</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-2xl font-bold text-admin">Оплата</h1>
+        <PushNotificationButton />
+      </div>
 
       <select
         value={selectedTestId}

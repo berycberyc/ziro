@@ -1,0 +1,21 @@
+{
+  "name": "Ziro",
+  "short_name": "Ziro",
+  "description": "Ziro — байқау тесттерге тіркелу порталы",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#F3F5F2",
+  "theme_color": "#16233F",
+  "icons": [
+    {
+      "src": "/logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

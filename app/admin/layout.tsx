@@ -13,6 +13,7 @@ const navItems = [
   { href: "/admin/bookings", label: "Оплата" },
   { href: "/admin/topics", label: "Тақырыптар" },
   { href: "/admin/zipgrade", label: "ZipGrade" },
+  { href: "/admin/dev", label: "Әзірлеуші құралдары", danger: true },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

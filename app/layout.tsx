@@ -25,6 +25,8 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Ziro — байқау тесттерге тіркелу порталы",
   description: "Ziro: НЗМ, БИЛ, РФММ байқау тесттері — тіркелу, төлем, нәтижелер",
+  manifest: "/manifest.json",
+  themeColor: "#16233F",
 };
 
 export default function RootLayout({
@@ -36,6 +38,17 @@ export default function RootLayout({
     <html lang="kk">
       <body className={`${manropeDisplay.variable} ${manrope.variable} ${plexMono.variable} font-body`}>
         <LangProvider>{children}</LangProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js').catch(() => {});
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );
