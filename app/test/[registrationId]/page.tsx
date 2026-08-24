@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
-import { SUBJECT_LABELS, SUBJECT_MINUTES, QUANTITY_CHOICE_LABELS, type SubjectKey } from "@/lib/questions/subjects";
+import {
+  SUBJECT_LABELS,
+  SUBJECT_MINUTES,
+  QUANTITY_CHOICE_LABELS,
+  MONOLINGUAL_SUBJECTS,
+  type SubjectKey,
+} from "@/lib/questions/subjects";
 import MathText from "@/components/MathText";
 
 type QuestionPublic = {
@@ -22,10 +28,13 @@ type QuestionPublic = {
   passage_id: string | null;
 };
 
-type Phase = "loading" | "error" | "consent" | "ready" | "question" | "break" | "finished";
+type PassageRow = { id: string; passage_text_kk: string; passage_text_ru: string };
+
+type Phase = "loading" | "error" | "consent" | "ready" | "question" | "finished";
+
+type SaveState = "idle" | "saving" | "saved" | "retrying";
 
 const LETTERS = ["A", "B", "C", "D"] as const;
-const BREAK_SECONDS = 5 * 60;
 
 export default function TestTakingPage() {
   const params = useParams();
@@ -34,93 +43,166 @@ export default function TestTakingPage() {
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [errorMsg, setErrorMsg] = useState("");
+
   const [blocks, setBlocks] = useState<SubjectKey[]>([]);
   const [subjectIndex, setSubjectIndex] = useState(0);
   const [variantNumber, setVariantNumber] = useState(1);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   const [questions, setQuestions] = useState<QuestionPublic[]>([]);
-  const [passageText, setPassageText] = useState<string | null>(null);
-  const [passageCache, setPassageCache] = useState<Record<string, string>>({});
+  const [passages, setPassages] = useState<Record<string, PassageRow>>({});
   const [qIndex, setQIndex] = useState(0);
 
-  const [pendingChoice, setPendingChoice] = useState<string | null>(null);
-  const [pendingNumeric, setPendingNumeric] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
+  // Барлық жауаптар: { сұрақ нөмірі -> жауап }. Ағымдағы пән бойынша.
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [saveState, setSaveState] = useState<SaveState>("idle");
 
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [consentChecked, setConsentChecked] = useState(false);
-  const [finalScoreNote, setFinalScoreNote] = useState(false);
-  const [starting, setStarting] = useState(false);
-
-  const phaseRef = useRef(phase);
-  const qIndexRef = useRef(qIndex);
-  const questionsRef = useRef(questions);
-  const subjectRef = useRef<SubjectKey | null>(null);
-  useEffect(() => { phaseRef.current = phase; }, [phase]);
-  useEffect(() => { qIndexRef.current = qIndex; }, [qIndex]);
-  useEffect(() => { questionsRef.current = questions; }, [questions]);
+  const [busy, setBusy] = useState(false);
+  const [confirmFinish, setConfirmFinish] = useState(false);
 
   const currentSubject = blocks[subjectIndex] as SubjectKey | undefined;
-  useEffect(() => { subjectRef.current = currentSubject ?? null; }, [currentSubject]);
+  const monolingual = currentSubject ? MONOLINGUAL_SUBJECTS.includes(currentSubject) : false;
 
-  useEffect(() => {
-    const q = questions[qIndex];
-    if (!q) return;
-    if (q.passage_id) {
-      setPassageText(passageCache[q.passage_id] ?? null);
-    } else {
-      setPassageText(null);
+  // Сервер мен құрылғы сағатының айырмасы. Оқушы телефонының уақытын
+  // өзгертсе де, қалған уақыт серверге қарап есептеледі.
+  const clockOffsetRef = useRef(0);
+  const deadlineRef = useRef<number | null>(null);
+
+  function noteServerTime(serverNow: string | null | undefined) {
+    if (!serverNow) return;
+    clockOffsetRef.current = Date.now() - new Date(serverNow).getTime();
+  }
+
+  function computeDeadline(startedAt: string | null, subject: SubjectKey | undefined) {
+    if (!startedAt || !subject) return null;
+    const startMs = new Date(startedAt).getTime() + clockOffsetRef.current;
+    return startMs + SUBJECT_MINUTES[subject] * 60 * 1000;
+  }
+
+  // ------------------------------------------------------------------
+  // Жауапты сақтау кезегі. Интернет үзілсе жауап жоғалмауы керек —
+  // сондықтан кезекке қойып, сәтсіз болса қайталаймыз.
+  // ------------------------------------------------------------------
+  const queueRef = useRef<{ subject: string; qnum: number; answer: string }[]>([]);
+  const workingRef = useRef(false);
+
+  const processQueue = useCallback(async () => {
+    if (workingRef.current) return;
+    workingRef.current = true;
+
+    while (queueRef.current.length > 0) {
+      const item = queueRef.current[0];
+      setSaveState("saving");
+      let ok = false;
+
+      for (let attempt = 0; attempt < 4 && !ok; attempt++) {
+        const { error } = await supabase.rpc("save_test_answer", {
+          p_registration_id: registrationId,
+          p_subject: item.subject,
+          p_question_number: item.qnum,
+          p_answer: item.answer,
+        });
+        if (!error) {
+          ok = true;
+          break;
+        }
+        setSaveState("retrying");
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+
+      if (!ok) {
+        // Жауапты кезекте қалдырамыз — келесі әрекетте тағы тырысады.
+        setSaveState("retrying");
+        workingRef.current = false;
+        setTimeout(() => processQueue(), 4000);
+        return;
+      }
+
+      queueRef.current.shift();
     }
-  }, [qIndex, questions, passageCache]);
 
-  const loadQuestionsForSubject = useCallback(
+    setSaveState("saved");
+    workingRef.current = false;
+  }, [registrationId]);
+
+  const queueAnswer = useCallback(
+    (qnum: number, answer: string) => {
+      const subj = currentSubject;
+      if (!subj) return;
+      setAnswers((prev) => ({ ...prev, [qnum]: answer }));
+      // Сол сұрақтың ескі жазбасын кезектен алып тастаймыз — соңғысы ғана керек.
+      queueRef.current = queueRef.current.filter((i) => !(i.subject === subj && i.qnum === qnum));
+      queueRef.current.push({ subject: subj, qnum, answer });
+      processQueue();
+    },
+    [currentSubject, processQueue]
+  );
+
+  /** Блокты аяқтамас бұрын кезектегінің бәрі жетуі керек. */
+  const flushQueue = useCallback(async () => {
+    for (let i = 0; i < 25 && queueRef.current.length > 0; i++) {
+      await processQueue();
+      if (queueRef.current.length > 0) await new Promise((r) => setTimeout(r, 500));
+    }
+    return queueRef.current.length === 0;
+  }, [processQueue]);
+
+  // ------------------------------------------------------------------
+  // Сұрақтарды және мәтіндерді жүктеу
+  // ------------------------------------------------------------------
+  const loadQuestions = useCallback(
     async (subject: SubjectKey, variant: number, sid: string) => {
       const { data, error } = await supabase
         .from("questions_public")
-        .select("id, question_number, text_kk, text_ru, image_url, answer_format, choices, column_a_kk, column_a_ru, column_b_kk, column_b_ru, passage_id")
+        .select(
+          "id, question_number, text_kk, text_ru, image_url, answer_format, choices, column_a_kk, column_a_ru, column_b_kk, column_b_ru, passage_id"
+        )
         .eq("session_id", sid)
         .eq("subject", subject)
         .eq("variant_number", variant)
         .order("question_number");
       if (error) throw error;
-      setQuestions((data as any) ?? []);
-      setQIndex(0);
-      setPendingChoice(null);
-      setPendingNumeric("");
-      setConfirmed(false);
 
-      const firstPassageId = (data as any)?.[0]?.passage_id;
-      if (firstPassageId) {
-        const passageIds = [...new Set(((data as any) ?? []).map((q: any) => q.passage_id).filter(Boolean))];
-        const { data: passages } = await supabase
+      const list = (data as QuestionPublic[]) ?? [];
+      setQuestions(list);
+
+      // МАҢЫЗДЫ: мәтіндерді БҮКІЛ блок бойынша жинаймыз. Бұрын тек бірінші
+      // сұрақта мәтін болса ғана жүктелетін — тілдерде алғашқы сұрақтар
+      // мәтінсіз болғандықтан, мәтін ешқайда көрінбей қалатын.
+      const passageIds = [...new Set(list.map((q) => q.passage_id).filter(Boolean))] as string[];
+      if (passageIds.length > 0) {
+        const { data: rows } = await supabase
           .from("passages")
           .select("id, passage_text_kk, passage_text_ru")
           .in("id", passageIds);
-        const cache: Record<string, string> = {};
-        (passages ?? []).forEach((p) => {
-          cache[p.id] = lang === "kk" ? p.passage_text_kk : p.passage_text_ru;
+        const map: Record<string, PassageRow> = {};
+        (rows ?? []).forEach((p: any) => {
+          map[p.id] = p;
         });
-        setPassageCache(cache);
-        setPassageText(cache[firstPassageId] ?? null);
+        setPassages(map);
       } else {
-        setPassageCache({});
-        setPassageText(null);
+        setPassages({});
       }
 
-      return ((data as any) ?? []).length;
+      return list.length;
     },
-    [lang]
+    []
   );
 
+  // ------------------------------------------------------------------
+  // Бетті ашқанда: күйді толық қалпына келтіру
+  // ------------------------------------------------------------------
   useEffect(() => {
+    let cancelled = false;
+
     async function init() {
-      // Оқушы жүйеге кірмей тест тапсырады (anon рөлі), сондықтан
-      // registrations кестесін тікелей оқи алмайды — RLS рұқсат бермейді.
-      // session_id мен нұсқа нөмірін security definer RPC-дің өзі қайтарады.
       const { data, error } = await supabase.rpc("start_test_attempt", {
         p_registration_id: registrationId,
       });
+
+      if (cancelled) return;
 
       if (error || !data) {
         setErrorMsg("Брондау табылмады немесе онлайн формат емес.");
@@ -129,167 +211,256 @@ export default function TestTakingPage() {
       }
 
       const result = data as any;
+      noteServerTime(result.server_now);
 
       if (!result.session_id) {
         setErrorMsg("Сессия деректері табылмады. Ұйымдастырушыға хабарласыңыз.");
         setPhase("error");
         return;
       }
-      if (!result.blocks || result.blocks.length === 0) {
+      const blockList: SubjectKey[] = result.blocks ?? [];
+      if (blockList.length === 0) {
         setErrorMsg("Бұл тест түріне пәндер тізімі бапталмаған.");
         setPhase("error");
         return;
       }
 
-      setBlocks(result.blocks);
-      setSubjectIndex(result.current_subject_index ?? 0);
-      setVariantNumber(Number(result.variant_number) || 1);
+      setBlocks(blockList);
       setSessionId(result.session_id);
+      setVariantNumber(Number(result.variant_number) || 1);
 
       if (result.status === "submitted") {
         setPhase("finished");
         return;
       }
 
+      const idx = result.current_subject_index ?? 0;
+      setSubjectIndex(idx);
+
       if (!result.consent_given_at) {
         setPhase("consent");
-      } else {
-        setPhase("ready");
+        return;
       }
+
+      const subject = blockList[idx];
+      if (!subject) {
+        setPhase("finished");
+        return;
+      }
+
+      // Бұрын берілген жауаптарды қалпына келтіреміз.
+      const saved = (result.answers ?? {})[subject] ?? {};
+      const restored: Record<number, string> = {};
+      Object.keys(saved).forEach((k) => {
+        restored[Number(k)] = String(saved[k] ?? "");
+      });
+      setAnswers(restored);
+
+      // Уақыт басталмаған болса — бастау экраны.
+      if (!result.subject_started_at) {
+        setPhase("ready");
+        return;
+      }
+
+      const deadline = computeDeadline(result.subject_started_at, subject);
+      const left = deadline ? Math.round((deadline - Date.now()) / 1000) : 0;
+
+      if (left <= 0) {
+        // Уақыт біткен — блокты жабамыз.
+        setPhase("ready");
+        setSecondsLeft(0);
+        return;
+      }
+
+      try {
+        await loadQuestions(subject, Number(result.variant_number) || 1, result.session_id);
+      } catch (err) {
+        console.error("Failed to load questions:", err);
+        setErrorMsg("Сұрақтарды жүктеу кезінде қате шықты. Бетті жаңартып көріңіз.");
+        setPhase("error");
+        return;
+      }
+
+      if (cancelled) return;
+      deadlineRef.current = deadline;
+      setSecondsLeft(left);
+      // Жауап берілмеген алғашқы сұрақтан жалғастырамыз.
+      setPhase("question");
     }
+
     init();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registrationId]);
 
+  // Қалпына келтіргеннен кейін бірінші бос сұраққа тұрамыз.
+  const positionedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "question" || positionedRef.current || questions.length === 0) return;
+    positionedRef.current = true;
+    const firstEmpty = questions.findIndex((q) => !answers[q.question_number]);
+    setQIndex(firstEmpty >= 0 ? firstEmpty : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, questions]);
+
+  // ------------------------------------------------------------------
+  // Таймер
+  // ------------------------------------------------------------------
+  const finishBlockRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (phase !== "question" || deadlineRef.current === null) return;
+    const tick = () => {
+      const left = Math.round(((deadlineRef.current ?? 0) - Date.now()) / 1000);
+      setSecondsLeft(left);
+      if (left <= 0) finishBlockRef.current();
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [phase]);
+
+  // ------------------------------------------------------------------
+  // Блокты бастау / аяқтау
+  // ------------------------------------------------------------------
   async function handleConfirmConsent() {
     await supabase.rpc("confirm_test_consent", { p_registration_id: registrationId });
     setPhase("ready");
   }
 
   async function handleStartSubject() {
-    // Бұрын мұнда үнсіз return тұрған — түйме басылса да ештеңе болмайтын.
-    // Енді себебі экранға шығады.
+    if (busy) return;
     if (!currentSubject || !sessionId) {
       setErrorMsg("Тестті бастау мүмкін болмады. Бетті жаңартып көріңіз.");
       setPhase("error");
       return;
     }
-    if (starting) return;
-
-    setStarting(true);
+    setBusy(true);
     try {
-      const loaded = await loadQuestionsForSubject(currentSubject, variantNumber, sessionId);
+      const loaded = await loadQuestions(currentSubject, variantNumber, sessionId);
       if (loaded === 0) {
         setErrorMsg("Бұл пән бойынша сұрақтар табылмады. Ұйымдастырушыға хабарласыңыз.");
         setPhase("error");
         return;
       }
-      setSecondsLeft(SUBJECT_MINUTES[currentSubject] * 60);
+
+      const { data, error } = await supabase.rpc("start_subject_timer", {
+        p_registration_id: registrationId,
+      });
+      if (error || !data) throw error ?? new Error("no timer");
+
+      const res = data as any;
+      noteServerTime(res.server_now);
+      deadlineRef.current = computeDeadline(res.subject_started_at, currentSubject);
+      setSecondsLeft(
+        deadlineRef.current ? Math.round((deadlineRef.current - Date.now()) / 1000) : 0
+      );
+      positionedRef.current = false;
+      setQIndex(0);
       setPhase("question");
     } catch (err) {
       console.error("Failed to start subject:", err);
-      setErrorMsg("Сұрақтарды жүктеу кезінде қате шықты. Интернетті тексеріп, қайталаңыз.");
+      setErrorMsg("Тестті бастау мүмкін болмады. Интернетті тексеріп, қайталаңыз.");
       setPhase("error");
     } finally {
-      setStarting(false);
+      setBusy(false);
     }
   }
 
-  const submitCurrentAsBlank = useCallback(async () => {
-    const subj = subjectRef.current;
-    const q = questionsRef.current[qIndexRef.current];
-    if (!subj || !q) return;
-    await supabase.rpc("save_test_answer", {
-      p_registration_id: registrationId,
-      p_subject: subj,
-      p_question_number: q.question_number,
-      p_answer: "",
-    });
-  }, [registrationId]);
+  const finishBlock = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    setConfirmFinish(false);
+    try {
+      await flushQueue();
 
-  const goToNextQuestion = useCallback(async () => {
-    const subj = subjectRef.current;
-    if (!subj) return;
-    const nextIndex = qIndexRef.current + 1;
-    if (nextIndex >= questionsRef.current.length) {
-      // subject finished
-      const { data } = await supabase.rpc("advance_test_block", { p_registration_id: registrationId });
-      const result = data as any;
-      if (result?.is_finished) {
+      const { data } = await supabase.rpc("advance_test_block", {
+        p_registration_id: registrationId,
+      });
+      const res = data as any;
+      noteServerTime(res?.server_now);
+
+      if (res?.is_finished) {
         await supabase.rpc("submit_test_attempt", { p_registration_id: registrationId });
         setPhase("finished");
-      } else {
-        setSubjectIndex(result.current_subject_index);
-        setSecondsLeft(BREAK_SECONDS);
-        setPhase("break");
+        return;
       }
-      return;
-    }
-    setQIndex(nextIndex);
-    setPendingChoice(null);
-    setPendingNumeric("");
-    setConfirmed(false);
-  }, [registrationId]);
 
-  // Anti-cheat: leaving the tab/window marks ONLY the current question
-  // blank and moves on — the test itself keeps going.
+      setSubjectIndex(res?.current_subject_index ?? subjectIndex + 1);
+      setAnswers({});
+      setQuestions([]);
+      setPassages({});
+      setQIndex(0);
+      deadlineRef.current = null;
+      setSecondsLeft(null);
+      positionedRef.current = false;
+      setPhase("ready");
+    } catch (err) {
+      console.error("Failed to finish block:", err);
+      setErrorMsg("Блокты аяқтау кезінде қате шықты. Интернетті тексеріп, бетті жаңартыңыз.");
+      setPhase("error");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, flushQueue, registrationId, subjectIndex]);
+
   useEffect(() => {
-    async function handleLeave() {
-      if (phaseRef.current !== "question") return;
-      await submitCurrentAsBlank();
-      await goToNextQuestion();
-    }
-    function onVisibility() {
-      if (document.hidden) handleLeave();
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("blur", handleLeave);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("blur", handleLeave);
-    };
-  }, [submitCurrentAsBlank, goToNextQuestion]);
+    finishBlockRef.current = finishBlock;
+  }, [finishBlock]);
 
-  // Per-question / per-subject countdown
-  useEffect(() => {
-    if (phase !== "question" && phase !== "break") return;
-    if (secondsLeft <= 0) {
-      if (phase === "question") {
-        (async () => {
-          await submitCurrentAsBlank();
-          await goToNextQuestion();
-        })();
-      } else if (phase === "break") {
-        handleStartSubject();
-      }
-      return;
-    }
-    const timer = setInterval(() => setSecondsLeft((s) => s - 1), 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, secondsLeft]);
+  // ------------------------------------------------------------------
+  // Жауап беру
+  // ------------------------------------------------------------------
+  const numericTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function handleConfirmAnswer() {
-    const q = questions[qIndex];
-    if (!q) return;
-    const answer = q.answer_format === "numeric" ? pendingNumeric : pendingChoice ?? "";
-    if (!answer) return;
-    await supabase.rpc("save_test_answer", {
-      p_registration_id: registrationId,
-      p_subject: currentSubject,
-      p_question_number: q.question_number,
-      p_answer: answer,
-    });
-    setConfirmed(true);
-    setTimeout(() => goToNextQuestion(), 400);
+  function handleChoice(qnum: number, letter: string) {
+    // Қайта басса — таңдауды алып тастайды.
+    queueAnswer(qnum, answers[qnum] === letter ? "" : letter);
+  }
+
+  function handleNumeric(qnum: number, value: string) {
+    const clean = value.replace(/[^\d]/g, "");
+    setAnswers((prev) => ({ ...prev, [qnum]: clean }));
+    if (numericTimer.current) clearTimeout(numericTimer.current);
+    numericTimer.current = setTimeout(() => queueAnswer(qnum, clean), 600);
   }
 
   function formatTime(s: number) {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    const safe = Math.max(0, s);
+    const h = Math.floor(safe / 3600);
+    const m = Math.floor((safe % 3600) / 60);
+    const sec = safe % 60;
+    const mm = String(m).padStart(2, "0");
+    const ss = String(sec).padStart(2, "0");
+    return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
   }
 
+  function passageFor(q: QuestionPublic | undefined) {
+    if (!q?.passage_id) return null;
+    const p = passages[q.passage_id];
+    if (!p) return null;
+    // Тілдер бір тілде — қай тіл таңдалса да, сол мәтін көрсетіледі.
+    if (monolingual) return p.passage_text_kk || p.passage_text_ru;
+    return (lang === "kk" ? p.passage_text_kk : p.passage_text_ru) || p.passage_text_kk;
+  }
+
+  function qText(q: QuestionPublic) {
+    if (monolingual) return q.text_kk || q.text_ru || "";
+    return ((lang === "kk" ? q.text_kk : q.text_ru) ?? "") || q.text_kk || "";
+  }
+
+  function choiceText(c: { text_kk: string; text_ru: string }) {
+    if (monolingual) return c.text_kk || c.text_ru || "";
+    return ((lang === "kk" ? c.text_kk : c.text_ru) ?? "") || c.text_kk || "";
+  }
+
+  // ------------------------------------------------------------------
+  // Экрандар
+  // ------------------------------------------------------------------
   if (phase === "loading") return <main className="p-10 text-center text-ink/50">Жүктелуде...</main>;
+
   if (phase === "error")
     return <main className="p-10 text-center text-red-600">{errorMsg}</main>;
 
@@ -297,12 +468,13 @@ export default function TestTakingPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 shadow-lg">
-          <h1 className="font-display text-xl font-bold text-red-600">Маңызды ескерту</h1>
-          <p className="mt-4 text-sm leading-relaxed text-ink/70">
-            Тест барысында терезені жабуға немесе басқа қойындыға/қосымшаға ауысуға{" "}
-            <b>болмайды</b>. Егер шықсаңыз, сол сәттегі сұрақ бос жауап ретінде есептеледі және тест
-            жалғаса береді.
-          </p>
+          <h1 className="font-display text-xl font-bold text-ink">Тест ережелері</h1>
+          <ul className="mt-4 space-y-2 text-sm leading-relaxed text-ink/70">
+            <li>• Әр пәнге белгіленген уақыт беріледі. Уақыт біткенде блок автоматты жабылады.</li>
+            <li>• Уақыт сервер бойынша есептеледі — бетті жаңартсаңыз да жалғаса береді.</li>
+            <li>• Блок ішінде сұрақтар арасында еркін жүруге, жауапты өзгертуге болады.</li>
+            <li>• Блокты аяқтағаннан кейін оған қайта оралу мүмкін емес.</li>
+          </ul>
           <label className="mt-5 flex items-start gap-2 text-sm text-ink/70">
             <input
               type="checkbox"
@@ -310,7 +482,7 @@ export default function TestTakingPage() {
               onChange={(e) => setConsentChecked(e.target.checked)}
               className="mt-0.5 h-4 w-4"
             />
-            Мен осы ережелермен келісемін.
+            Мен осы ережелермен таныстым.
           </label>
           <button
             onClick={handleConfirmConsent}
@@ -324,37 +496,28 @@ export default function TestTakingPage() {
     );
   }
 
-  if (phase === "ready" || phase === "break") {
+  if (phase === "ready") {
+    const isBreak = subjectIndex > 0;
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
-          {phase === "break" ? (
-            <>
-              <h1 className="font-display text-xl font-bold text-ink">Үзіліс</h1>
-              <p className="mt-2 text-sm text-ink/60">Келесі пән:</p>
-              <p className="mt-1 font-display text-lg font-bold text-parent">
-                {currentSubject && SUBJECT_LABELS[currentSubject]}
-              </p>
-              <p className="mt-4 font-mono text-3xl font-bold text-teacher tabular-nums">
-                {formatTime(secondsLeft)}
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="font-display text-xl font-bold text-ink">
-                {currentSubject && SUBJECT_LABELS[currentSubject]}
-              </h1>
-              <p className="mt-2 text-sm text-ink/60">
-                Дайын болғанда бастаңыз. Уақыт: {currentSubject && SUBJECT_MINUTES[currentSubject]} минут.
-              </p>
-            </>
-          )}
+          {isBreak && <p className="font-display text-sm font-bold text-teacher">Үзіліс</p>}
+          <h1 className="mt-1 font-display text-xl font-bold text-ink">
+            {currentSubject && SUBJECT_LABELS[currentSubject]}
+          </h1>
+          <p className="mt-2 text-sm text-ink/60">
+            Уақыт: {currentSubject && SUBJECT_MINUTES[currentSubject]} минут.
+            {isBreak && " Дайын болғанда бастаңыз — үзіліс уақыты тест уақытынан алынбайды."}
+          </p>
+          <p className="mt-3 text-xs text-ink/40">
+            Блок {subjectIndex + 1} / {blocks.length}
+          </p>
           <button
             onClick={handleStartSubject}
-            disabled={starting}
+            disabled={busy}
             className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {starting ? "Жүктелуде..." : phase === "break" ? "Келесі пәнге өту" : "Бастау"}
+            {busy ? "Жүктелуде..." : isBreak ? "Келесі пәнді бастау" : "Бастау"}
           </button>
         </div>
       </div>
@@ -367,69 +530,114 @@ export default function TestTakingPage() {
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
           <h1 className="font-display text-xl font-bold text-parent">Тест аяқталды</h1>
           <p className="mt-4 text-sm text-ink/70">
-            Жауаптарыңыз қабылданды. Нәтиже шамамен 1 күн ішінде жеке кабинетте пайда болады.
+            Жауаптарыңыз қабылданды. Нәтиже барлық қатысушы тапсырғаннан кейін жеке кабинетте
+            жарияланады.
           </p>
         </div>
       </div>
     );
   }
 
-  // phase === "question"
+  // ---------------- phase === "question" ----------------
   const q = questions[qIndex];
   if (!q) return <main className="p-10 text-center text-ink/50">Жүктелуде...</main>;
 
+  const answered = questions.filter((x) => answers[x.question_number]).length;
+  const unanswered = questions.length - answered;
+  const passageText = passageFor(q);
+  const current = answers[q.question_number] ?? "";
+
   return (
     <div className="mx-auto max-w-xl px-4 py-6">
-      <div className="sticky top-0 z-10 mb-6 flex items-center justify-between rounded-2xl border border-ink/10 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
-        <div>
-          <p className="font-display font-bold text-ink">{currentSubject && SUBJECT_LABELS[currentSubject]}</p>
-          <p className="font-mono text-xs text-ink/50">
-            {qIndex + 1} / {questions.length}
-          </p>
+      <div className="sticky top-0 z-10 mb-4 rounded-2xl border border-ink/10 bg-white/95 px-5 py-3 shadow-sm backdrop-blur">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-display font-bold text-ink">
+              {currentSubject && SUBJECT_LABELS[currentSubject]}
+            </p>
+            <p className="font-mono text-xs text-ink/50">
+              {answered} / {questions.length} жауап берілді
+            </p>
+          </div>
+          <div
+            className={`font-mono text-2xl font-bold tabular-nums ${
+              (secondsLeft ?? 0) <= 300 ? "text-red-600" : "text-teacher"
+            }`}
+          >
+            {formatTime(secondsLeft ?? 0)}
+          </div>
         </div>
-        <div className="font-mono text-2xl font-bold text-teacher tabular-nums">
-          {formatTime(secondsLeft)}
+
+        {/* Сұрақтар торы: жауап берілгені толтырылған, бос сұрақ сұр */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {questions.map((item, i) => {
+            const isAnswered = Boolean(answers[item.question_number]);
+            const isCurrent = i === qIndex;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setQIndex(i)}
+                className={`focus-ring h-7 w-7 rounded-md font-mono text-xs font-semibold transition-colors ${
+                  isCurrent
+                    ? "bg-ink text-white ring-2 ring-gold ring-offset-1"
+                    : isAnswered
+                    ? "bg-parent text-white"
+                    : "bg-ink/10 text-ink/50 hover:bg-ink/20"
+                }`}
+              >
+                {item.question_number}
+              </button>
+            );
+          })}
         </div>
+
+        <p className="mt-2 font-mono text-[11px] text-ink/40">
+          {saveState === "saving" && "Сақталуда..."}
+          {saveState === "saved" && "Сақталды ✓"}
+          {saveState === "retrying" && (
+            <span className="text-red-600">Байланыс жоқ — қайта жіберілуде...</span>
+          )}
+        </p>
       </div>
 
       {passageText && (
-        <div className="mb-4 rounded-2xl border border-ink/10 bg-parchment p-5 text-sm leading-relaxed text-ink/80 whitespace-pre-line">
+        <div className="mb-4 whitespace-pre-line rounded-2xl border border-ink/10 bg-parchment p-5 text-sm leading-relaxed text-ink/80">
           <MathText text={passageText} />
         </div>
       )}
 
       <div className="rounded-2xl border border-ink/10 bg-white p-5">
         <p className="whitespace-pre-line font-medium text-ink">
-          {qIndex + 1}. <MathText text={(lang === "kk" ? q.text_kk : q.text_ru) ?? ""} />
+          {q.question_number}. <MathText text={qText(q)} />
         </p>
         {q.image_url && <img src={q.image_url} alt="" className="my-3 max-w-xs" />}
 
         {q.answer_format === "numeric" && (
           <input
-            value={pendingNumeric}
-            onChange={(e) => setPendingNumeric(e.target.value.replace(/[^\d]/g, ""))}
+            value={current}
+            onChange={(e) => handleNumeric(q.question_number, e.target.value)}
             inputMode="numeric"
-            disabled={confirmed}
             placeholder="Жауап"
-            className="focus-ring mt-3 w-40 rounded-xl border border-ink/15 px-3 py-2 text-sm disabled:opacity-50"
+            className="focus-ring mt-3 w-40 rounded-xl border border-ink/15 px-3 py-2 text-sm"
           />
         )}
 
         {q.answer_format === "abcd" && (
           <div className="mt-3 flex flex-col gap-2">
-            {q.choices.map((c, i) => {
+            {(q.choices ?? []).map((c, i) => {
               const letter = LETTERS[i];
-              const selected = pendingChoice === letter;
+              const selected = current === letter;
               return (
                 <button
                   key={i}
-                  disabled={confirmed}
-                  onClick={() => setPendingChoice(letter)}
-                  className={`focus-ring rounded-xl border px-4 py-2.5 text-left text-sm transition-colors disabled:opacity-60 ${
-                    selected ? "border-gold bg-gold/10 font-semibold text-ink" : "border-ink/15 hover:bg-parchment"
+                  onClick={() => handleChoice(q.question_number, letter)}
+                  className={`focus-ring rounded-xl border px-4 py-2.5 text-left text-sm transition-colors ${
+                    selected
+                      ? "border-gold bg-gold/10 font-semibold text-ink"
+                      : "border-ink/15 hover:bg-parchment"
                   }`}
                 >
-                  <span className="font-mono">{letter})</span> <MathText text={(lang === "kk" ? c.text_kk : c.text_ru) ?? ""} />
+                  <span className="font-mono">{letter})</span> <MathText text={choiceText(c)} />
                 </button>
               );
             })}
@@ -450,32 +658,80 @@ export default function TestTakingPage() {
             </div>
             <div className="mt-3 flex flex-col gap-2">
               {(Object.keys(QUANTITY_CHOICE_LABELS) as ("A" | "B" | "C" | "D")[]).map((letter) => {
-                const selected = pendingChoice === letter;
+                const selected = current === letter;
                 return (
                   <button
                     key={letter}
-                    disabled={confirmed}
-                    onClick={() => setPendingChoice(letter)}
-                    className={`focus-ring rounded-xl border px-4 py-2.5 text-left text-sm transition-colors disabled:opacity-60 ${
-                      selected ? "border-gold bg-gold/10 font-semibold text-ink" : "border-ink/15 hover:bg-parchment"
+                    onClick={() => handleChoice(q.question_number, letter)}
+                    className={`focus-ring rounded-xl border px-4 py-2.5 text-left text-sm transition-colors ${
+                      selected
+                        ? "border-gold bg-gold/10 font-semibold text-ink"
+                        : "border-ink/15 hover:bg-parchment"
                     }`}
                   >
-                    <span className="font-mono">{letter})</span> {lang === "kk" ? QUANTITY_CHOICE_LABELS[letter].kk : QUANTITY_CHOICE_LABELS[letter].ru}
+                    <span className="font-mono">{letter})</span>{" "}
+                    {lang === "kk"
+                      ? QUANTITY_CHOICE_LABELS[letter].kk
+                      : QUANTITY_CHOICE_LABELS[letter].ru}
                   </button>
                 );
               })}
             </div>
           </>
         )}
+      </div>
 
+      <div className="mt-4 flex items-center justify-between gap-3">
         <button
-          onClick={handleConfirmAnswer}
-          disabled={confirmed || (q.answer_format === "numeric" ? !pendingNumeric : !pendingChoice)}
-          className="focus-ring mt-4 w-full rounded-full bg-gold px-5 py-2.5 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
+          onClick={() => setQIndex((i) => Math.max(0, i - 1))}
+          disabled={qIndex === 0}
+          className="focus-ring rounded-full border border-ink/15 px-5 py-2.5 text-sm font-semibold text-ink/70 disabled:opacity-40"
         >
-          {confirmed ? "Растайды..." : "Растау"}
+          ← Алдыңғы
+        </button>
+        <button
+          onClick={() => setQIndex((i) => Math.min(questions.length - 1, i + 1))}
+          disabled={qIndex >= questions.length - 1}
+          className="focus-ring rounded-full border border-ink/15 px-5 py-2.5 text-sm font-semibold text-ink/70 disabled:opacity-40"
+        >
+          Келесі →
         </button>
       </div>
+
+      <button
+        onClick={() => (unanswered > 0 ? setConfirmFinish(true) : finishBlock())}
+        disabled={busy}
+        className="focus-ring mt-6 w-full rounded-full bg-ink px-5 py-3 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+      >
+        {busy ? "Жіберілуде..." : "Блокты аяқтау"}
+      </button>
+
+      {confirmFinish && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/60 px-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-xl">
+            <p className="font-display text-lg font-bold text-ink">Блокты аяқтау</p>
+            <p className="mt-3 text-sm text-ink/70">
+              <b>{unanswered}</b> сұраққа жауап берілмеген. Блокты аяқтасаңыз, оған қайта оралу
+              мүмкін емес.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setConfirmFinish(false)}
+                className="focus-ring flex-1 rounded-full border border-ink/15 px-4 py-2.5 text-sm font-semibold text-ink/70"
+              >
+                Оралу
+              </button>
+              <button
+                onClick={finishBlock}
+                disabled={busy}
+                className="focus-ring flex-1 rounded-full bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                Аяқтау
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
