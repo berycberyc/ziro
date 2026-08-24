@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { fetchAll } from "@/lib/fetchAll";
 import {
   SUBJECT_MAX_COUNT,
   SUBJECT_LABELS,
@@ -33,17 +34,28 @@ export default function SessionQuestionsSelectorPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const { data } = await supabase
-        .from("questions")
-        .select("subject, variant_number")
-        .eq("session_id", sessionId);
-      const map: Record<string, number> = {};
-      (data ?? []).forEach((row: any) => {
-        const key = `${row.variant_number}:${row.subject}`;
-        map[key] = (map[key] ?? 0) + 1;
-      });
-      setCounts(map);
-      setLoading(false);
+      try {
+        // Бір сессияда 1000-нан көп сұрақ болуы мүмкін (4 нұсқа × барлық пән),
+        // сондықтан беттеп оқимыз — әйтпесе саны кем көрінеді.
+        const rows = await fetchAll<{ subject: string; variant_number: number }>((from, to) =>
+          supabase
+            .from("questions")
+            .select("subject, variant_number")
+            .eq("session_id", sessionId)
+            .order("id")
+            .range(from, to)
+        );
+        const map: Record<string, number> = {};
+        rows.forEach((row) => {
+          const key = `${row.variant_number}:${row.subject}`;
+          map[key] = (map[key] ?? 0) + 1;
+        });
+        setCounts(map);
+      } catch (err) {
+        console.error("Question counts failed to load:", err);
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, [sessionId]);

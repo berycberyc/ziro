@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { fetchAll } from "@/lib/fetchAll";
 
 type TrialTest = {
   id: string;
@@ -59,17 +60,26 @@ export default function MonitoringPage() {
       const t = trialTests.find((x) => x.id === selectedId) ?? null;
       setSelected(t);
 
-      const { data } = await supabase
-        .from("registrations")
-        .select(
-          `
-          id, format, payment_status, checked_in_at,
-          students ( full_name ),
-          test_types ( name_kk, name_ru )
-          `
-        )
-        .eq("test_session_id", selectedId);
-      setRegs((data as any) ?? []);
+      try {
+        const data = await fetchAll<any>((from, to) =>
+          supabase
+            .from("registrations")
+            .select(
+              `
+              id, format, payment_status, checked_in_at,
+              students ( full_name ),
+              test_types ( name_kk, name_ru )
+              `
+            )
+            .eq("test_session_id", selectedId)
+            .order("id")
+            .range(from, to)
+        );
+        setRegs(data as any);
+      } catch (err) {
+        console.error("Monitoring failed to load registrations:", err);
+        setRegs([]);
+      }
       setLoading(false);
     }
     load();

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { fetchAll } from "@/lib/fetchAll";
 
 type Registration = {
   id: string;
@@ -52,18 +53,27 @@ export default function AdminSessionDetailPage() {
     setSession(sessionData);
     if (sessionData) setForm(sessionData);
 
-    const { data: regs } = await supabase
-      .from("registrations")
-      .select(
-        `
-        id, format, payment_status, classroom, seat, test_variant,
-        students ( full_name, iin, language ),
-        test_types ( name_kk, name_ru )
-        `
-      )
-      .eq("test_session_id", sessionId)
-      .order("created_at", { ascending: true });
-    setRegistrations((regs as any) ?? []);
+    try {
+      const regs = await fetchAll<any>((from, to) =>
+        supabase
+          .from("registrations")
+          .select(
+            `
+            id, format, payment_status, classroom, seat, test_variant,
+            students ( full_name, iin, language ),
+            test_types ( name_kk, name_ru )
+            `
+          )
+          .eq("test_session_id", sessionId)
+          .order("created_at", { ascending: true })
+          .order("id")
+          .range(from, to)
+      );
+      setRegistrations(regs as any);
+    } catch (err) {
+      console.error("Session registrations failed to load:", err);
+      setRegistrations([]);
+    }
     setLoading(false);
   }, [sessionId]);
 

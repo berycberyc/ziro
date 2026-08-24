@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { fetchAll, fetchAllByIds } from "@/lib/fetchAll";
 
 type Registration = {
   id: string;
@@ -41,23 +42,30 @@ export default function AdminCurrentTestingDetailPage() {
       .single();
     if (sessionData) setSessionTitle(sessionData.title_kk);
 
-    const { data: regs } = await supabase
-      .from("registrations")
-      .select("id, classroom, seat, checked_in_at, student_id, test_type_id")
-      .eq("test_session_id", sessionId)
-      .eq("payment_status", "paid");
+    const registrations = await fetchAll<any>((from, to) =>
+      supabase
+        .from("registrations")
+        .select("id, classroom, seat, checked_in_at, student_id, test_type_id")
+        .eq("test_session_id", sessionId)
+        .eq("payment_status", "paid")
+        .order("id")
+        .range(from, to)
+    );
 
-    const registrations = regs ?? [];
-    const studentIds = [...new Set(registrations.map((r) => r.student_id))];
-    const testTypeIds = [...new Set(registrations.map((r) => r.test_type_id))];
+    const studentIds = registrations.map((r) => r.student_id);
+    const testTypeIds = registrations.map((r) => r.test_type_id);
 
-    const [studentsRes, testTypesRes] = await Promise.all([
-      supabase.from("students").select("id, full_name, zipgrade_id").in("id", studentIds),
-      supabase.from("test_types").select("id, name_kk, name_ru").in("id", testTypeIds),
+    const [studentsData, testTypesData] = await Promise.all([
+      fetchAllByIds<any>(studentIds, (chunk) =>
+        supabase.from("students").select("id, full_name, zipgrade_id").in("id", chunk)
+      ),
+      fetchAllByIds<any>(testTypeIds, (chunk) =>
+        supabase.from("test_types").select("id, name_kk, name_ru").in("id", chunk)
+      ),
     ]);
 
-    const studentsMap = new Map((studentsRes.data ?? []).map((s) => [s.id, s]));
-    const testTypesMap = new Map((testTypesRes.data ?? []).map((tt) => [tt.id, tt]));
+    const studentsMap = new Map(studentsData.map((s) => [s.id, s]));
+    const testTypesMap = new Map(testTypesData.map((tt) => [tt.id, tt]));
 
     setRows(
       registrations.map((r) => ({

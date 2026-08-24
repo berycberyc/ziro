@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { fetchAll } from "@/lib/fetchAll";
 
 type ResultRow = { zipgrade_id: string; subject_label: string; score: number };
 
@@ -39,13 +40,24 @@ export default function ResultsPage() {
       setStudentName(student?.full_name ?? "");
       setMyZipgradeId(student?.zipgrade_id ?? "");
 
-      const { data: results } = await supabase
-        .from("results")
-        .select("zipgrade_id, subject_label, score")
-        .eq("test_session_id", reg.test_session_id);
+      // Толық рейтинг керек — 1000 жолдық шектен асып кетсе, орын дұрыс
+      // есептелмейді, сондықтан беттеп оқимыз.
+      let results: ResultRow[] = [];
+      try {
+        results = await fetchAll<ResultRow>((from, to) =>
+          supabase
+            .from("results")
+            .select("zipgrade_id, subject_label, score")
+            .eq("test_session_id", reg.test_session_id)
+            .order("id")
+            .range(from, to)
+        );
+      } catch (err) {
+        console.error("Results failed to load:", err);
+      }
 
-      setAllResults(results ?? []);
-      setMyResults((results ?? []).filter((r) => r.zipgrade_id === student?.zipgrade_id));
+      setAllResults(results);
+      setMyResults(results.filter((r) => r.zipgrade_id === student?.zipgrade_id));
       setLoading(false);
     }
     load();

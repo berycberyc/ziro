@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
+import { fetchAll, fetchAllByIds } from "@/lib/fetchAll";
 
 type TrialTest = { id: string; title_kk: string; title_ru: string; session_date: string };
 
@@ -30,25 +31,43 @@ export default function UploadDownloadPage() {
     setDownloading(true);
     setError("");
 
-    const { data: regs } = await supabase
-      .from("registrations")
-      .select("id, format, payment_status, classroom, seat, test_variant, student_id, test_type_id")
-      .eq("test_session_id", selectedId);
+    let regs: any[] = [];
+    let studentsData: any[] = [];
+    let testTypesData: any[] = [];
+    try {
+      regs = await fetchAll<any>((from, to) =>
+        supabase
+          .from("registrations")
+          .select("id, format, payment_status, classroom, seat, test_variant, student_id, test_type_id")
+          .eq("test_session_id", selectedId)
+          .order("id")
+          .range(from, to)
+      );
 
-    const studentIds = [...new Set((regs ?? []).map((r) => r.student_id))];
-    const testTypeIds = [...new Set((regs ?? []).map((r) => r.test_type_id))];
+      const studentIds = regs.map((r) => r.student_id);
+      const testTypeIds = regs.map((r) => r.test_type_id);
 
-    const [studentsRes, testTypesRes] = await Promise.all([
-      supabase
-        .from("students")
-        .select("id, first_name, last_name, iin, language, grade, region, city, school, zipgrade_id")
-        .in("id", studentIds),
-      supabase.from("test_types").select("id, name_kk, name_ru").in("id", testTypeIds),
-    ]);
-    const studentsMap = new Map((studentsRes.data ?? []).map((s) => [s.id, s]));
-    const testTypesMap = new Map((testTypesRes.data ?? []).map((tt) => [tt.id, tt]));
+      [studentsData, testTypesData] = await Promise.all([
+        fetchAllByIds<any>(studentIds, (chunk) =>
+          supabase
+            .from("students")
+            .select("id, first_name, last_name, iin, language, grade, region, city, school, zipgrade_id")
+            .in("id", chunk)
+        ),
+        fetchAllByIds<any>(testTypeIds, (chunk) =>
+          supabase.from("test_types").select("id, name_kk, name_ru").in("id", chunk)
+        ),
+      ]);
+    } catch (err: any) {
+      setError("Тізімді жүктеу кезінде қате шықты: " + (err?.message ?? "белгісіз қате"));
+      setDownloading(false);
+      return;
+    }
 
-    const rows = (regs ?? []).map((r) => {
+    const studentsMap = new Map(studentsData.map((s) => [s.id, s]));
+    const testTypesMap = new Map(testTypesData.map((tt) => [tt.id, tt]));
+
+    const rows = regs.map((r) => {
       const student = studentsMap.get(r.student_id);
       const testType = testTypesMap.get(r.test_type_id);
       return {
@@ -154,14 +173,20 @@ export default function UploadDownloadPage() {
         return;
       }
 
-      const { error: upsertErr } = await supabase
-        .from("results")
-        .upsert(parsed, { onConflict: "test_session_id,zipgrade_id,subject_label" });
+      // Үлкен файлды бір сұраныспен жіберу тәуекелді — бөліктеп жүктейміз.
+      const CHUNK = 500;
+      for (let i = 0; i < parsed.length; i += CHUNK) {
+        const { error: upsertErr } = await supabase
+          .from("results")
+          .upsert(parsed.slice(i, i + CHUNK), {
+            onConflict: "test_session_id,zipgrade_id,subject_label",
+          });
 
-      if (upsertErr) {
-        setError(upsertErr.message);
-        setUploading(false);
-        return;
+        if (upsertErr) {
+          setError(upsertErr.message);
+          setUploading(false);
+          return;
+        }
       }
 
       setMessage(`${parsed.length} жол сәтті жүктелді.`);

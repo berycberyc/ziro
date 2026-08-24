@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
+import { fetchAll } from "@/lib/fetchAll";
 import DummyDataButton from "@/components/DummyDataButton";
 import { SUBJECT_LABELS, PASSAGE_SUBJECTS, type SubjectKey } from "@/lib/questions/subjects";
 
@@ -114,15 +115,18 @@ export default function DevToolsPage() {
       let passageIdMap: Record<string, string> = {};
 
       if (isPassageSubject) {
-        const { data: passages, error: passagesError } = await supabase
-          .from("passages")
-          .select("id, passage_text_kk, passage_text_ru, order_number")
-          .eq("session_id", selectedId)
-          .eq("subject", copySubject)
-          .eq("variant_number", sourceVariant);
-        if (passagesError) throw passagesError;
+        const passages = await fetchAll<any>((from, to) =>
+          supabase
+            .from("passages")
+            .select("id, passage_text_kk, passage_text_ru, order_number")
+            .eq("session_id", selectedId)
+            .eq("subject", copySubject)
+            .eq("variant_number", sourceVariant)
+            .order("id")
+            .range(from, to)
+        );
 
-        for (const p of passages ?? []) {
+        for (const p of passages) {
           const { data: newPassage, error: insertError } = await supabase
             .from("passages")
             .insert({
@@ -140,17 +144,21 @@ export default function DevToolsPage() {
         }
       }
 
-      const { data: questions, error: questionsError } = await supabase
-        .from("questions")
-        .select(
-          "question_number, topic_id, passage_id, text_kk, text_ru, image_url, answer_format, choices, correct_answer, column_a_kk, column_a_ru, column_b_kk, column_b_ru"
-        )
-        .eq("session_id", selectedId)
-        .eq("subject", copySubject)
-        .eq("variant_number", sourceVariant);
-      if (questionsError) throw questionsError;
+      const questions = await fetchAll<any>((from, to) =>
+        supabase
+          .from("questions")
+          .select(
+            "question_number, topic_id, passage_id, text_kk, text_ru, image_url, answer_format, choices, correct_answer, column_a_kk, column_a_ru, column_b_kk, column_b_ru"
+          )
+          .eq("session_id", selectedId)
+          .eq("subject", copySubject)
+          .eq("variant_number", sourceVariant)
+          .order("question_number")
+          .order("id")
+          .range(from, to)
+      );
 
-      if (!questions || questions.length === 0) {
+      if (questions.length === 0) {
         setCopyError("Бастапқы нұсқада сұрақтар табылмады.");
         setCopying(false);
         return;
@@ -195,16 +203,21 @@ export default function DevToolsPage() {
     setExportError("");
 
     try {
-      const { data: questions, error } = await supabase
-        .from("questions")
-        .select("subject, variant_number, question_number, answer_format, choices, correct_answer")
-        .eq("session_id", selectedId)
-        .order("subject")
-        .order("variant_number")
-        .order("question_number");
-      if (error) throw error;
+      // Сессияда 1000-нан көп сұрақ болуы мүмкін — беттеп оқимыз,
+      // әйтпесе Excel-ге бәрі түспей қалады (қатесіз, үнсіз).
+      const questions = await fetchAll<any>((from, to) =>
+        supabase
+          .from("questions")
+          .select("subject, variant_number, question_number, answer_format, choices, correct_answer")
+          .eq("session_id", selectedId)
+          .order("subject")
+          .order("variant_number")
+          .order("question_number")
+          .order("id")
+          .range(from, to)
+      );
 
-      const rows = (questions ?? []).map((q) => {
+      const rows = questions.map((q: any) => {
         let correct = "";
         if (q.answer_format === "numeric") {
           correct = q.correct_answer ?? "";

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { fetchAll } from "@/lib/fetchAll";
 import PushNotificationButton from "@/components/PushNotificationButton";
 
 type Booking = {
@@ -50,18 +51,27 @@ export default function BookingsPage() {
 
   const load = useCallback(async (testId: string) => {
     setLoading(true);
-    const { data } = await supabase
-      .from("registrations")
-      .select(
-        `
-        id, payment_status, student_id, parent_id, receipt_url,
-        students ( full_name, iin, grade, region, city, school, language ),
-        test_types ( name_kk, name_ru )
-        `
-      )
-      .eq("test_session_id", testId)
-      .order("created_at", { ascending: false });
-    setBookings((data as any) ?? []);
+    try {
+      const data = await fetchAll<any>((from, to) =>
+        supabase
+          .from("registrations")
+          .select(
+            `
+            id, payment_status, student_id, parent_id, receipt_url,
+            students ( full_name, iin, grade, region, city, school, language ),
+            test_types ( name_kk, name_ru )
+            `
+          )
+          .eq("test_session_id", testId)
+          .order("created_at", { ascending: false })
+          .order("id")
+          .range(from, to)
+      );
+      setBookings(data as any);
+    } catch (err) {
+      console.error("Bookings failed to load:", err);
+      setBookings([]);
+    }
     setLoading(false);
   }, []);
 

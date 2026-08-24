@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { fetchAll } from "@/lib/fetchAll";
 
 type ResultRow = { zipgrade_id: string; subject_label: string; score: number };
 
@@ -25,11 +26,21 @@ export default function AdminResultsPreviewPage() {
         .single();
       setSessionTitle(session ? `${session.title_kk} / ${session.title_ru}` : "");
 
-      const { data } = await supabase
-        .from("results")
-        .select("zipgrade_id, subject_label, score")
-        .eq("test_session_id", sessionId);
-      setResults(data ?? []);
+      // Нәтиже саны = қатысушы × пән, 1000-нан оңай асады.
+      try {
+        const data = await fetchAll<ResultRow>((from, to) =>
+          supabase
+            .from("results")
+            .select("zipgrade_id, subject_label, score")
+            .eq("test_session_id", sessionId)
+            .order("id")
+            .range(from, to)
+        );
+        setResults(data);
+      } catch (err) {
+        console.error("Results preview failed to load:", err);
+        setResults([]);
+      }
       setLoading(false);
     }
     load();
