@@ -12,6 +12,7 @@ const navItems = [
   { href: "/admin/monitoring", label: "Мониторинг" },
   { href: "/admin/bookings", label: "Оплата" },
   { href: "/admin/topics", label: "Тақырыптар" },
+  { href: "/admin/scoring", label: "Нәтижелерді есептеу" },
   { href: "/admin/zipgrade", label: "ZipGrade" },
   { href: "/admin/dev", label: "Әзірлеуші құралдары", danger: true },
 ];
