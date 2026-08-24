@@ -4,7 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { SUBJECT_MAX_COUNT, SUBJECT_LABELS, type SubjectKey } from "@/lib/questions/subjects";
+import {
+  SUBJECT_MAX_COUNT,
+  SUBJECT_LABELS,
+  MONOLINGUAL_SUBJECTS,
+  type SubjectKey,
+} from "@/lib/questions/subjects";
 
 type Topic = { id: string; name_kk: string; name_ru: string };
 type Choice = { text_kk: string; text_ru: string; correct: boolean };
@@ -26,7 +31,9 @@ export default function PassageQuestionEntryPage() {
   const searchParams = useSearchParams();
   const sessionId = params.id as string;
   const variant = parseInt(searchParams.get("variant") ?? "1", 10);
-  const subject = (searchParams.get("subject") ?? "tilder_kk") as SubjectKey;
+  const subject = (searchParams.get("subject") ?? "tilder") as SubjectKey;
+  // Тілдер бір тілде жазылады — аударма өрістері мүлдем көрсетілмейді.
+  const monolingual = MONOLINGUAL_SUBJECTS.includes(subject);
   const max = SUBJECT_MAX_COUNT[subject];
 
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -106,7 +113,7 @@ export default function PassageQuestionEntryPage() {
 
   function handlePassageKkChange(value: string) {
     setPassageTextKk(value);
-    if (passageSame) setPassageTextRu(value);
+    if (monolingual || passageSame) setPassageTextRu(value);
   }
 
   function handlePassageSameToggle(checked: boolean) {
@@ -136,14 +143,14 @@ export default function PassageQuestionEntryPage() {
   }, [sessionId, subject, variant]);
 
   async function handleSavePassage() {
-    if (!passageTextKk.trim() || (!passageSame && !passageTextRu.trim())) {
+    if (!passageTextKk.trim() || (!monolingual && !passageSame && !passageTextRu.trim())) {
       setError("Мәтін бос болмауы керек.");
       return;
     }
     setSavingPassage(true);
     setError("");
 
-    const finalRu = passageSame ? passageTextKk : passageTextRu;
+    const finalRu = monolingual || passageSame ? passageTextKk : passageTextRu;
 
     if (activePassageId) {
       await supabase
@@ -200,7 +207,7 @@ export default function PassageQuestionEntryPage() {
     setDraftChoices((prev) =>
       prev.map((c, i) => {
         if (i !== index) return c;
-        if (draftSame) return { ...c, text_kk: value, text_ru: value };
+        if (monolingual || draftSame) return { ...c, text_kk: value, text_ru: value };
         return { ...c, [field]: value };
       })
     );
@@ -208,7 +215,7 @@ export default function PassageQuestionEntryPage() {
 
   function handleDraftKkChange(value: string) {
     setDraftKk(value);
-    if (draftSame) setDraftRu(value);
+    if (monolingual || draftSame) setDraftRu(value);
   }
 
   function handleDraftSameToggle(checked: boolean) {
@@ -225,9 +232,11 @@ export default function PassageQuestionEntryPage() {
       return;
     }
     if (!draftTopic) return setError("Тема таңдалмаған.");
-    if (!draftKk.trim() || (!draftSame && !draftRu.trim())) return setError("Сұрақ мәтіні толтырылмаған.");
+    if (!draftKk.trim() || (!monolingual && !draftSame && !draftRu.trim()))
+      return setError("Сұрақ мәтіні толтырылмаған.");
     for (const c of draftChoices) {
-      if (!c.text_kk.trim() || (!draftSame && !c.text_ru.trim())) return setError("Барлық 4 жауап толтырылуы керек.");
+      if (!c.text_kk.trim() || (!monolingual && !draftSame && !c.text_ru.trim()))
+        return setError("Барлық 4 жауап толтырылуы керек.");
     }
     if (!draftChoices.some((c) => c.correct)) return setError("Дұрыс жауап белгіленбеген.");
 
@@ -237,8 +246,10 @@ export default function PassageQuestionEntryPage() {
     }
 
     setError("");
-    const finalRu = draftSame ? draftKk : draftRu;
-    const finalChoices = draftChoices.map((c) => (draftSame ? { ...c, text_ru: c.text_kk } : c));
+    const finalRu = monolingual || draftSame ? draftKk : draftRu;
+    const finalChoices = draftChoices.map((c) =>
+      monolingual || draftSame ? { ...c, text_ru: c.text_kk } : c
+    );
 
     if (editingQuestionId) {
       await supabase
@@ -311,17 +322,19 @@ export default function PassageQuestionEntryPage() {
       </div>
 
       <div className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
-        <label className="flex items-center gap-2 text-sm text-ink/70">
-          <input
-            type="checkbox"
-            checked={passageSame}
-            onChange={(e) => handlePassageSameToggle(e.target.checked)}
-          />
-          Бірдей мәтін екі тілде
-        </label>
+        {!monolingual && (
+          <label className="flex items-center gap-2 text-sm text-ink/70">
+            <input
+              type="checkbox"
+              checked={passageSame}
+              onChange={(e) => handlePassageSameToggle(e.target.checked)}
+            />
+            Бірдей мәтін екі тілде
+          </label>
+        )}
 
-        <label className="mt-3 block text-xs font-semibold text-ink/50">
-          {passageSame ? "Мәтін" : "Мәтін — қазақша"}
+        <label className={`block text-xs font-semibold text-ink/50 ${monolingual ? "" : "mt-3"}`}>
+          {monolingual || passageSame ? "Мәтін" : "Мәтін — қазақша"}
         </label>
         <textarea
           value={passageTextKk}
@@ -329,7 +342,7 @@ export default function PassageQuestionEntryPage() {
           rows={6}
           className="focus-ring mt-1 w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
         />
-        {!passageSame && (
+        {!monolingual && !passageSame && (
           <>
             <label className="mt-3 block text-xs font-semibold text-ink/50">Текст — русский</label>
             <textarea
@@ -397,13 +410,15 @@ export default function PassageQuestionEntryPage() {
                 ))}
               </select>
 
-              <label className="mt-3 flex items-center gap-2 text-sm text-ink/70">
-                <input type="checkbox" checked={draftSame} onChange={(e) => handleDraftSameToggle(e.target.checked)} />
-                Бірдей мәтін екі тілде
-              </label>
+              {!monolingual && (
+                <label className="mt-3 flex items-center gap-2 text-sm text-ink/70">
+                  <input type="checkbox" checked={draftSame} onChange={(e) => handleDraftSameToggle(e.target.checked)} />
+                  Бірдей мәтін екі тілде
+                </label>
+              )}
 
               <label className="mt-3 block text-xs font-semibold text-ink/50">
-                {draftSame ? "Сұрақ мәтіні" : "Сұрақ мәтіні — қазақша"}
+                {monolingual || draftSame ? "Сұрақ мәтіні" : "Сұрақ мәтіні — қазақша"}
               </label>
               <textarea
                 value={draftKk}
@@ -411,7 +426,7 @@ export default function PassageQuestionEntryPage() {
                 rows={2}
                 className="focus-ring mt-1 w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
               />
-              {!draftSame && (
+              {!monolingual && !draftSame && (
                 <>
                   <label className="mt-3 block text-xs font-semibold text-ink/50">Текст вопроса — русский</label>
                   <textarea
@@ -437,14 +452,14 @@ export default function PassageQuestionEntryPage() {
                       />
                       <span className="text-sm font-semibold text-ink">{"ABCD"[i]})</span>
                     </div>
-                    <div className={`mt-1 grid gap-2 ${draftSame ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
+                    <div className={`mt-1 grid gap-2 ${monolingual || draftSame ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
                       <input
                         value={c.text_kk}
                         onChange={(e) => updateDraftChoice(i, "text_kk", e.target.value)}
-                        placeholder={draftSame ? "жауап" : "қазақша"}
+                        placeholder={monolingual || draftSame ? "жауап" : "қазақша"}
                         className="focus-ring rounded-lg border border-ink/15 px-3 py-1.5 text-sm"
                       />
-                      {!draftSame && (
+                      {!monolingual && !draftSame && (
                         <input
                           value={c.text_ru}
                           onChange={(e) => updateDraftChoice(i, "text_ru", e.target.value)}

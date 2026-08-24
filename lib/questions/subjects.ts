@@ -2,9 +2,7 @@ export type SubjectKey =
   | "math"
   | "sandyq"
   | "zharatylystanu"
-  | "tilder_kk"
-  | "tilder_ru"
-  | "tilder_en"
+  | "tilder"
   | "bil_math"
   | "bil_reading"
   | "rfmsh";
@@ -13,9 +11,7 @@ export const SUBJECT_MINUTES: Record<SubjectKey, number> = {
   math: 60,
   sandyq: 30,
   zharatylystanu: 30,
-  tilder_kk: 40,
-  tilder_ru: 40,
-  tilder_en: 40,
+  tilder: 120,
   bil_math: 92,
   bil_reading: 18,
   rfmsh: 120,
@@ -25,9 +21,7 @@ export const SUBJECT_MAX_COUNT: Record<SubjectKey, number> = {
   math: 40,
   sandyq: 60,
   zharatylystanu: 20,
-  tilder_kk: 20,
-  tilder_ru: 20,
-  tilder_en: 20,
+  tilder: 60,
   bil_math: 50,
   bil_reading: 10,
   rfmsh: 30,
@@ -37,9 +31,7 @@ export const SUBJECT_LABELS: Record<SubjectKey, string> = {
   math: "Математика",
   sandyq: "Сандық сипаттамалар / Количественные характеристики",
   zharatylystanu: "Жаратылыстану / Естествознание",
-  tilder_kk: "Тілдер / Языки (қазақ)",
-  tilder_ru: "Тілдер / Языки (орыс)",
-  tilder_en: "Тілдер / Языки (ағылшын)",
+  tilder: "Тілдер / Языки",
   bil_math: "БИЛ — математика",
   bil_reading: "БИЛ — оқылым",
   rfmsh: "РФМШ / РФММ",
@@ -60,11 +52,23 @@ export const QUANTITY_CHOICE_LABELS: Record<"A" | "B" | "C" | "D", { kk: string;
 // РФМШ has no answer choices at all.
 export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math", "zharatylystanu", "bil_math"];
 export const QUANTITY_SUBJECTS: SubjectKey[] = ["sandyq"];
-export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder_kk", "tilder_ru", "tilder_en", "bil_reading"];
+export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder", "bil_reading"];
+
+// Тілдер жалғыз тілде жазылады (қазақ бөлімі қазақша, орыс бөлімі орысша,
+// ағылшын бөлімі ағылшынша) — аударманың мағынасы жоқ. БИЛ-оқылым екі тілде.
+export const MONOLINGUAL_SUBJECTS: SubjectKey[] = ["tilder"];
+
+// Тілдер 60 сұрақ: 1–20 қазақ тілі, 21–40 орыс тілі, 41–60 ағылшын тілі.
+// Бөлу тек ұпай санағанда болады, енгізуде де, тестте де тұтас 1–60.
+export const TILDER_SECTIONS = [
+  { key: "tilder_kk", label: "Қазақ тілі", from: 1, to: 20, maxScore: 200 },
+  { key: "tilder_ru", label: "Орыс тілі", from: 21, to: 40, maxScore: 200 },
+  { key: "tilder_en", label: "Ағылшын тілі", from: 41, to: 60, maxScore: 200 },
+] as const;
 export const NUMERIC_SUBJECTS: SubjectKey[] = ["rfmsh"];
 
 export const TEST_TYPE_SUBJECTS: Record<string, SubjectKey[]> = {
-  NIS: ["math", "sandyq", "zharatylystanu", "tilder_kk", "tilder_ru", "tilder_en"],
+  NIS: ["math", "sandyq", "zharatylystanu", "tilder"],
   BIL: ["bil_math", "bil_reading"],
   RFMS: ["rfmsh"],
 };
