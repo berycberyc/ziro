@@ -24,7 +24,7 @@ type Question = {
   passage_id: string | null;
   topics: { name_kk: string; name_ru: string } | null;
 };
-type Passage = { id: string; passage_text: string; order_number: number };
+type Passage = { id: string; passage_text_kk: string; passage_text_ru: string; order_number: number };
 
 const LETTERS = ["A", "B", "C", "D"];
 
@@ -57,7 +57,7 @@ export default function QuestionPreviewPage() {
       if (passageIds.length > 0) {
         const { data: passageData } = await supabase
           .from("passages")
-          .select("id, passage_text, order_number")
+          .select("id, passage_text_kk, passage_text_ru, order_number")
           .in("id", passageIds);
         const map: Record<string, Passage> = {};
         (passageData ?? []).forEach((p) => { map[p.id] = p; });
@@ -90,8 +90,15 @@ export default function QuestionPreviewPage() {
           return (
             <div key={q.id}>
               {showPassage && q.passage_id && passages[q.passage_id] && (
-                <div className="mb-3 rounded-2xl border border-ink/10 bg-parchment p-4 text-sm leading-relaxed text-ink/80 whitespace-pre-line">
-                  <MathText text={passages[q.passage_id].passage_text} />
+                <div className="mb-3 rounded-2xl border border-ink/10 bg-parchment p-4 text-sm leading-relaxed text-ink/80">
+                  <p className="mb-1 font-mono text-xs font-semibold text-ink/40">ҚАЗ</p>
+                  <div className="whitespace-pre-line">
+                    <MathText text={passages[q.passage_id].passage_text_kk} />
+                  </div>
+                  <p className="mb-1 mt-3 font-mono text-xs font-semibold text-ink/40">РУС</p>
+                  <div className="whitespace-pre-line">
+                    <MathText text={passages[q.passage_id].passage_text_ru} />
+                  </div>
                 </div>
               )}
 

@@ -93,10 +93,12 @@ export default function TestTakingPage() {
         const passageIds = [...new Set(((data as any) ?? []).map((q: any) => q.passage_id).filter(Boolean))];
         const { data: passages } = await supabase
           .from("passages")
-          .select("id, passage_text")
+          .select("id, passage_text_kk, passage_text_ru")
           .in("id", passageIds);
         const cache: Record<string, string> = {};
-        (passages ?? []).forEach((p) => { cache[p.id] = p.passage_text; });
+        (passages ?? []).forEach((p) => {
+          cache[p.id] = lang === "kk" ? p.passage_text_kk : p.passage_text_ru;
+        });
         setPassageCache(cache);
         setPassageText(cache[firstPassageId] ?? null);
       } else {
@@ -104,7 +106,7 @@ export default function TestTakingPage() {
         setPassageText(null);
       }
     },
-    []
+    [lang]
   );
 
   useEffect(() => {

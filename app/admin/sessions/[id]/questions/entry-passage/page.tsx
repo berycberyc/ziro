@@ -8,7 +8,7 @@ import { SUBJECT_MAX_COUNT, SUBJECT_LABELS, type SubjectKey } from "@/lib/questi
 
 type Topic = { id: string; name_kk: string; name_ru: string };
 type Choice = { text_kk: string; text_ru: string; correct: boolean };
-type Passage = { id: string; passage_text: string; order_number: number };
+type Passage = { id: string; passage_text_kk: string; passage_text_ru: string; order_number: number };
 type QuestionRow = {
   id: string;
   question_number: number;
@@ -32,7 +32,9 @@ export default function PassageQuestionEntryPage() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [passages, setPassages] = useState<Passage[]>([]);
   const [activePassageId, setActivePassageId] = useState<string | null>(null);
-  const [passageText, setPassageText] = useState("");
+  const [passageSame, setPassageSame] = useState(true);
+  const [passageTextKk, setPassageTextKk] = useState("");
+  const [passageTextRu, setPassageTextRu] = useState("");
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ export default function PassageQuestionEntryPage() {
   const loadPassages = useCallback(async () => {
     const { data } = await supabase
       .from("passages")
-      .select("id, passage_text, order_number")
+      .select("id, passage_text_kk, passage_text_ru, order_number")
       .eq("session_id", sessionId)
       .eq("subject", subject)
       .eq("variant_number", variant)
@@ -84,7 +86,9 @@ export default function PassageQuestionEntryPage() {
 
   async function selectPassage(p: Passage) {
     setActivePassageId(p.id);
-    setPassageText(p.passage_text);
+    setPassageTextKk(p.passage_text_kk);
+    setPassageTextRu(p.passage_text_ru);
+    setPassageSame(p.passage_text_kk === p.passage_text_ru);
     setDraftOpen(false);
     setEditingQuestionId(null);
     await loadQuestionsForPassage(p.id);
@@ -92,10 +96,22 @@ export default function PassageQuestionEntryPage() {
 
   async function startNewPassage() {
     setActivePassageId(null);
-    setPassageText("");
+    setPassageTextKk("");
+    setPassageTextRu("");
+    setPassageSame(true);
     setQuestions([]);
     setDraftOpen(false);
     setEditingQuestionId(null);
+  }
+
+  function handlePassageKkChange(value: string) {
+    setPassageTextKk(value);
+    if (passageSame) setPassageTextRu(value);
+  }
+
+  function handlePassageSameToggle(checked: boolean) {
+    setPassageSame(checked);
+    if (checked) setPassageTextRu(passageTextKk);
   }
 
   useEffect(() => {
@@ -120,20 +136,32 @@ export default function PassageQuestionEntryPage() {
   }, [sessionId, subject, variant]);
 
   async function handleSavePassage() {
-    if (!passageText.trim()) {
+    if (!passageTextKk.trim() || (!passageSame && !passageTextRu.trim())) {
       setError("Мәтін бос болмауы керек.");
       return;
     }
     setSavingPassage(true);
     setError("");
 
+    const finalRu = passageSame ? passageTextKk : passageTextRu;
+
     if (activePassageId) {
-      await supabase.from("passages").update({ passage_text: passageText }).eq("id", activePassageId);
+      await supabase
+        .from("passages")
+        .update({ passage_text_kk: passageTextKk, passage_text_ru: finalRu })
+        .eq("id", activePassageId);
     } else {
       const nextOrder = passages.length > 0 ? Math.max(...passages.map((p) => p.order_number)) + 1 : 1;
       const { data, error: insertErr } = await supabase
         .from("passages")
-        .insert({ session_id: sessionId, subject, variant_number: variant, passage_text: passageText, order_number: nextOrder })
+        .insert({
+          session_id: sessionId,
+          subject,
+          variant_number: variant,
+          passage_text_kk: passageTextKk,
+          passage_text_ru: finalRu,
+          order_number: nextOrder,
+        })
         .select()
         .single();
       if (insertErr) {
@@ -283,13 +311,36 @@ export default function PassageQuestionEntryPage() {
       </div>
 
       <div className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
-        <label className="text-xs font-semibold text-ink/50">Мәтін</label>
+        <label className="flex items-center gap-2 text-sm text-ink/70">
+          <input
+            type="checkbox"
+            checked={passageSame}
+            onChange={(e) => handlePassageSameToggle(e.target.checked)}
+          />
+          Бірдей мәтін екі тілде
+        </label>
+
+        <label className="mt-3 block text-xs font-semibold text-ink/50">
+          {passageSame ? "Мәтін" : "Мәтін — қазақша"}
+        </label>
         <textarea
-          value={passageText}
-          onChange={(e) => setPassageText(e.target.value)}
+          value={passageTextKk}
+          onChange={(e) => handlePassageKkChange(e.target.value)}
           rows={6}
           className="focus-ring mt-1 w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
         />
+        {!passageSame && (
+          <>
+            <label className="mt-3 block text-xs font-semibold text-ink/50">Текст — русский</label>
+            <textarea
+              value={passageTextRu}
+              onChange={(e) => setPassageTextRu(e.target.value)}
+              rows={6}
+              className="focus-ring mt-1 w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+            />
+          </>
+        )}
+
         <button
           onClick={handleSavePassage}
           disabled={savingPassage}
