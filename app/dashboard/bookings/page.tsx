@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { getSettings, KASPI_QR_URL, KASPI_PAY_LINK, CONTACT_PHONE } from "@/lib/appSettings";
 import { useLang } from "@/lib/LangContext";
 
 type Registration = {
@@ -44,6 +45,18 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [qrDataUrls, setQrDataUrls] = useState<Record<string, string>>({});
+  // Kaspi төлем деректері — админ панельден өзгертіледі (app_settings).
+  const [kaspiQrUrl, setKaspiQrUrl] = useState<string | null>(null);
+  const [kaspiPayLink, setKaspiPayLink] = useState<string | null>(null);
+  const [contactPhone, setContactPhone] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSettings([KASPI_QR_URL, KASPI_PAY_LINK, CONTACT_PHONE]).then((s) => {
+      setKaspiQrUrl(s[KASPI_QR_URL]);
+      setKaspiPayLink(s[KASPI_PAY_LINK]);
+      setContactPhone(s[CONTACT_PHONE]);
+    });
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -370,33 +383,54 @@ export default function BookingsPage() {
               ) : (
                 <div className="p-5">
                   <div className="flex flex-wrap items-start gap-4">
-                    <div className="flex flex-col items-center">
-                      <a
-                        href="https://qr.kaspi.kz/1199806411750970251502354288835494391255"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <img
-                          src="/kaspi-qr.png"
-                          alt="Kaspi QR"
-                          className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm transition-transform hover:scale-[1.02]"
-                        />
-                      </a>
-                      <p className="mt-1.5 max-w-[130px] text-center text-[11px] leading-tight text-ink/50">
-                        Телефонмен сканерлеңіз немесе осында басыңыз
-                      </p>
-                    </div>
+                    {kaspiQrUrl && (
+                      <div className="flex flex-col items-center">
+                        {kaspiPayLink ? (
+                          <a href={kaspiPayLink} target="_blank" rel="noreferrer">
+                            <img
+                              src={kaspiQrUrl}
+                              alt="Kaspi QR"
+                              className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm transition-transform hover:scale-[1.02]"
+                            />
+                          </a>
+                        ) : (
+                          <img
+                            src={kaspiQrUrl}
+                            alt="Kaspi QR"
+                            className="h-32 w-32 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm"
+                          />
+                        )}
+                        {kaspiPayLink && (
+                          <p className="mt-1.5 max-w-[130px] text-center text-[11px] leading-tight text-ink/50">
+                            {t.payScanHint}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <div className="flex-1">
                       <p className="text-sm text-ink/70">{t.passWaitingPayment}</p>
                       <p className="mt-1 font-mono text-sm">
-                        Сомасы:{" "}
+                        {t.payAmount}:{" "}
                         <span className="font-semibold text-gold-deep">
                           {b.session?.price?.toLocaleString("ru-RU")} ₸
                         </span>
                       </p>
-                      <p className="mt-2 text-xs text-ink/50">
-                        Жоғарыдағы QR-кодты Kaspi қосымшасымен сканерлеп, көрсетілген соманы төлеңіз.
-                      </p>
+                      {kaspiQrUrl ? (
+                        <p className="mt-2 text-xs text-ink/50">{t.payInstruction}</p>
+                      ) : (
+                        // QR өшірілген — ата-ана бос блокты емес, байланыс деректерін көреді.
+                        <p className="mt-2 text-xs text-ink/60">
+                          {t.payUnavailable}{" "}
+                          {contactPhone && (
+                            <a
+                              href={`tel:${contactPhone.replace(/[^+\d]/g, "")}`}
+                              className="font-semibold text-parent hover:underline"
+                            >
+                              {contactPhone}
+                            </a>
+                          )}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -409,10 +443,10 @@ export default function BookingsPage() {
                           rel="noreferrer"
                           className="flex items-center gap-2 rounded-full bg-parent-soft px-4 py-2 text-sm font-semibold text-parent hover:opacity-90"
                         >
-                          Түбіртек жіберілді ✓
+                          {t.receiptSent}
                         </a>
                         <label className="focus-ring cursor-pointer rounded-full border border-ink/15 px-4 py-2 text-sm font-medium text-ink/60 hover:bg-parchment">
-                          {uploadingReceiptId === b.id ? "Жүктелуде..." : "Ауыстыру"}
+                          {uploadingReceiptId === b.id ? t.loading : t.receiptReplace}
                           <input
                             key={b.id}
                             type="file"
@@ -425,7 +459,7 @@ export default function BookingsPage() {
                       </div>
                     ) : (
                       <label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded-full bg-gold px-5 py-2.5 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5">
-                        {uploadingReceiptId === b.id ? "Жүктелуде..." : "Түбіртекті жіберу"}
+                        {uploadingReceiptId === b.id ? t.loading : t.receiptSend}
                         <input
                           key={b.id}
                           type="file"

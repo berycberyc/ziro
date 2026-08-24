@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 import { fetchAll } from "@/lib/fetchAll";
+import { getSettings, setSetting, KASPI_QR_URL, KASPI_PAY_LINK } from "@/lib/appSettings";
 import DummyDataButton from "@/components/DummyDataButton";
 import { SUBJECT_LABELS, PASSAGE_SUBJECTS, type SubjectKey } from "@/lib/questions/subjects";
 
@@ -31,6 +32,15 @@ export default function DevToolsPage() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
 
+  // Kaspi төлем баптаулары
+  const [kaspiQrUrl, setKaspiQrUrl] = useState<string | null>(null);
+  const [kaspiLink, setKaspiLink] = useState("");
+  const [kaspiLoading, setKaspiLoading] = useState(true);
+  const [kaspiBusy, setKaspiBusy] = useState(false);
+  const [kaspiMessage, setKaspiMessage] = useState("");
+  const [kaspiError, setKaspiError] = useState("");
+  const [confirmingQrDelete, setConfirmingQrDelete] = useState(false);
+
   useEffect(() => {
     supabase
       .from("test_sessions")
@@ -48,7 +58,82 @@ export default function DevToolsPage() {
         setOfertaRu(data?.text_ru ?? "");
         setOfertaLoading(false);
       });
+
+    getSettings([KASPI_QR_URL, KASPI_PAY_LINK]).then((s) => {
+      setKaspiQrUrl(s[KASPI_QR_URL]);
+      setKaspiLink(s[KASPI_PAY_LINK] ?? "");
+      setKaspiLoading(false);
+    });
   }, []);
+
+  async function handleKaspiQrUpload(file: File) {
+    setKaspiBusy(true);
+    setKaspiMessage("");
+    setKaspiError("");
+    try {
+      if (!file.type.startsWith("image/")) {
+        setKaspiError("Тек сурет файлын жүктеуге болады.");
+        return;
+      }
+      const ext = file.name.split(".").pop() ?? "png";
+      // Уақыт белгісі бар бірегей атау — әйтпесе браузер ескі суретті
+      // кэштен көрсете береді.
+      const path = `kaspi-qr/${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("app-assets")
+        .upload(path, file, { upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from("app-assets").getPublicUrl(path);
+      await setSetting(KASPI_QR_URL, publicUrlData.publicUrl);
+      setKaspiQrUrl(publicUrlData.publicUrl);
+      setKaspiMessage("QR жаңартылды ✓");
+    } catch (err: any) {
+      console.error("Kaspi QR upload failed:", err);
+      setKaspiError("Қате шықты: " + (err?.message ?? "белгісіз қате"));
+    } finally {
+      setKaspiBusy(false);
+    }
+  }
+
+  async function handleKaspiQrDelete() {
+    setKaspiBusy(true);
+    setKaspiMessage("");
+    setKaspiError("");
+    try {
+      await setSetting(KASPI_QR_URL, null);
+      setKaspiQrUrl(null);
+      setConfirmingQrDelete(false);
+      setKaspiMessage("QR өшірілді.");
+    } catch (err: any) {
+      console.error("Kaspi QR delete failed:", err);
+      setKaspiError("Қате шықты: " + (err?.message ?? "белгісіз қате"));
+    } finally {
+      setKaspiBusy(false);
+    }
+  }
+
+  async function handleKaspiLinkSave() {
+    setKaspiBusy(true);
+    setKaspiMessage("");
+    setKaspiError("");
+    try {
+      const trimmed = kaspiLink.trim();
+      if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+        setKaspiError("Сілтеме http:// немесе https:// деп басталуы керек.");
+        return;
+      }
+      await setSetting(KASPI_PAY_LINK, trimmed || null);
+      setKaspiLink(trimmed);
+      setKaspiMessage(trimmed ? "Сілтеме сақталды ✓" : "Сілтеме өшірілді.");
+    } catch (err: any) {
+      console.error("Kaspi link save failed:", err);
+      setKaspiError("Қате шықты: " + (err?.message ?? "белгісіз қате"));
+    } finally {
+      setKaspiBusy(false);
+    }
+  }
 
   async function handleSaveOferta() {
     setOfertaSaving(true);
@@ -370,6 +455,130 @@ export default function DevToolsPage() {
           {exporting ? "Жүктелуде..." : "Excel-ге жүктеп алу"}
         </button>
         {exportError && <p className="mt-2 text-sm text-red-600">{exportError}</p>}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-ink/10 bg-white p-5">
+        <h2 className="font-display text-lg font-bold text-ink">Kaspi төлем деректері</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          Ата-ана төлемеген брондауында көретін QR-код және оның сілтемесі. Өзгерту бірден күшіне
+          енеді, қайта деплой қажет емес.
+        </p>
+
+        {kaspiLoading ? (
+          <p className="mt-3 text-sm text-ink/50">Жүктелуде...</p>
+        ) : (
+          <>
+            <div className="mt-4 flex flex-wrap items-start gap-5">
+              <div className="flex flex-col items-center">
+                {kaspiQrUrl ? (
+                  <img
+                    src={kaspiQrUrl}
+                    alt="Kaspi QR"
+                    className="h-36 w-36 rounded-2xl border border-ink/10 bg-white p-2 shadow-sm"
+                  />
+                ) : (
+                  <div className="flex h-36 w-36 items-center justify-center rounded-2xl border border-dashed border-ink/20 bg-ink/5 px-3 text-center text-xs text-ink/40">
+                    QR жоқ
+                  </div>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <label className="focus-ring cursor-pointer rounded-full bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:opacity-90">
+                    {kaspiBusy ? "Жүктелуде..." : kaspiQrUrl ? "Ауыстыру" : "Жүктеу"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={kaspiBusy}
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) handleKaspiQrUpload(file);
+                      }}
+                    />
+                  </label>
+                  {kaspiQrUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingQrDelete(true)}
+                      disabled={kaspiBusy}
+                      className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-xs font-semibold text-ink/60 hover:bg-ink/5 disabled:opacity-50"
+                    >
+                      Өшіру
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-w-[260px] flex-1">
+                <label className="mb-1 block text-xs font-semibold text-ink/50">
+                  Төлем сілтемесі (QR басқанда ашылады)
+                </label>
+                <input
+                  type="url"
+                  value={kaspiLink}
+                  onChange={(e) => {
+                    setKaspiLink(e.target.value);
+                    setKaspiMessage("");
+                  }}
+                  placeholder="https://qr.kaspi.kz/..."
+                  className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 font-mono text-xs"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleKaspiLinkSave}
+                    disabled={kaspiBusy}
+                    className="focus-ring rounded-full bg-red-600 px-5 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {kaspiBusy ? "Сақталуда..." : "Сақтау"}
+                  </button>
+                  {kaspiLink.trim() && (
+                    <a
+                      href={kaspiLink.trim()}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="focus-ring rounded-full border border-ink/15 px-5 py-2 text-xs font-semibold text-ink/60 hover:bg-ink/5"
+                    >
+                      Тексеру ↗
+                    </a>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-ink/40">
+                  Сілтемені бос қалдырсаңыз, QR тек сурет ретінде көрсетіледі (басуға болмайды).
+                </p>
+              </div>
+            </div>
+
+            {confirmingQrDelete && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-red-50 px-4 py-3">
+                <span className="text-sm text-red-700">
+                  QR өшірілсе, ата-аналар төлем орнына &quot;бізбен байланысыңыз&quot; деген
+                  хабарламаны көреді. Өшіру керек пе?
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleKaspiQrDelete}
+                    disabled={kaspiBusy}
+                    className="focus-ring rounded-full bg-red-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Иә, өшіру
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingQrDelete(false)}
+                    className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-xs font-semibold text-ink/60"
+                  >
+                    Болдырмау
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {kaspiMessage && <p className="mt-3 text-sm text-parent">{kaspiMessage}</p>}
+            {kaspiError && <p className="mt-3 text-sm text-red-600">{kaspiError}</p>}
+          </>
+        )}
       </section>
 
       <section className="mt-6 rounded-2xl border border-ink/10 bg-white p-5">
