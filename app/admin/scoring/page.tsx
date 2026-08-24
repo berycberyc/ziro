@@ -423,32 +423,66 @@ export default function ScoringPage() {
         const { results, weights } = scoreNis(nisSheets, key, students);
         const wb = XLSX.utils.book_new();
 
+        // Бағандар ресми НИШ нәтиже кестесіндегідей: Математика мен Сандық
+        // сипаттамалардың пайызы бөлек, 1-күн (900) және 2-күн (600)
+        // аралық қорытындылары бар.
+        const DAY1 = ["math", "sandyq", "zharatylystanu"];
+        const DAY2 = ["tilder_kk", "tilder_ru", "tilder_en"];
+        const pct = (score: number, max: number) =>
+          max > 0 ? Math.round((score / max) * 1000) / 10 : 0;
+
         const head = [
           "Орын",
           "ZipGrade ID",
           "Аты",
           "Тегі",
-          ...NIS_SECTIONS.map((s) => s.label),
-          "Жалпы",
+          "Математика (400)",
+          "%",
+          "Сандық сипаттамалар (300)",
+          "%",
+          "Жаратылыстану (200)",
+          "1-күн барлығы (900)",
+          "Қазақ тілі (200)",
+          "Орыс тілі (200)",
+          "Ағылшын тілі (200)",
+          "2-күн барлығы (600)",
+          "Жалпы қорытынды балл (1500)",
           "Шектен төмен",
         ];
-        const body = results.map((r) => [
-          r.rank,
-          r.zipgrade_id,
-          r.first_name,
-          r.last_name,
-          ...NIS_SECTIONS.map((s) => r.scores[s.key] ?? 0),
-          r.total,
-          r.belowThreshold
-            .map((k) => NIS_SECTIONS.find((s) => s.key === k)?.label ?? k)
-            .join(", "),
-        ]);
+        const body = results.map((r) => {
+          const day1 = DAY1.reduce((a, k) => a + (r.scores[k] ?? 0), 0);
+          const day2 = DAY2.reduce((a, k) => a + (r.scores[k] ?? 0), 0);
+          return [
+            r.rank,
+            r.zipgrade_id,
+            r.first_name,
+            r.last_name,
+            r.scores.math ?? 0,
+            pct(r.scores.math ?? 0, 400),
+            r.scores.sandyq ?? 0,
+            pct(r.scores.sandyq ?? 0, 300),
+            r.scores.zharatylystanu ?? 0,
+            day1,
+            r.scores.tilder_kk ?? 0,
+            r.scores.tilder_ru ?? 0,
+            r.scores.tilder_en ?? 0,
+            day2,
+            r.total,
+            r.belowThreshold
+              .map((k) => NIS_SECTIONS.find((s) => s.key === k)?.label ?? k)
+              .join(", "),
+          ];
+        });
         const note = [
           [],
           ["Ескертпе:"],
           [
-            "«Шектен төмен» бағанында пән көрсетілген оқушы қызыл болып саналады — Математика 140-тан, Сандық сипаттамалар 120-дан төмен.",
+            "«Шектен төмен» бағанында пән көрсетілген оқушының нәтижесі ресми кестеде қызыл түспен белгіленеді.",
           ],
+          [
+            "«Математика» бөлімі бойынша 400 балдан 140 және одан жоғары (35%), «Сандық сипаттамалар» бойынша 300 балдан 120 және одан жоғары (40%) болуы керек.",
+          ],
+          ["Дәл шекті балл жинаған оқушы өтеді — шек қатаң емес."],
           ["Шектен төмен болса да оқушы тізімнен шықпайды, орны сол күйінде қалады."],
           ["Реттілік: жалпы сома → математика → сандық → жаратылыстану."],
         ];
