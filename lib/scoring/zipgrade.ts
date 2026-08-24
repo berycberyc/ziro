@@ -152,7 +152,6 @@ export const SUBJECT_QUIZ_NAMES: Record<SubjectKey, string> = {
   sandyq: "Ниш сандық",
   zharatylystanu: "Ниш жаратылыстану",
   tilder: "Ниш тілдер",
-  bil_math: "БИЛ математика",
-  bil_reading: "БИЛ оқылым",
+  bil: "БИЛ",
   rfmsh: "РФМШ",
 };

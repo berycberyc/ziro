@@ -8,8 +8,7 @@ const SUBJECTS = [
   { key: "sandyq", label: "Сандық сипаттама" },
   { key: "zharatylystanu", label: "Жаратылыстану" },
   { key: "tilder", label: "Тілдер" },
-  { key: "bil_math", label: "БИЛ — математика" },
-  { key: "bil_reading", label: "БИЛ — оқылым" },
+  { key: "bil", label: "БИЛ" },
   { key: "rfmsh", label: "РФМШ" },
 ];
 

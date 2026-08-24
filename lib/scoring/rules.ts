@@ -93,10 +93,18 @@ export const NIS_MIN_COHORT = 10;
 
 export const BIL_POINTS = { correct: 4, blank: 0, wrong: -1 };
 
+/**
+ * БИЛ — бір парақ, 60 сұрақ. Бөліну тек нәтижеде: 1–50 математика-логика,
+ * 51–60 оқу сауаттылығы. Ресми БИЛ рейтингінде екеуінің ұпайы бөлек және
+ * жалпы ұпай да көрсетіледі.
+ */
 export const BIL_SECTIONS = [
-  { key: "bil_math", label: "БИЛ — математика", subject: "bil_math" as SubjectKey },
-  { key: "bil_reading", label: "БИЛ — оқылым", subject: "bil_reading" as SubjectKey },
+  { key: "bil_math", label: "Математика-логика", from: 1, to: 50 },
+  { key: "bil_reading", label: "Оқу сауаттылығы", from: 51, to: 60 },
 ];
+
+/** 60 × 4 = 240 */
+export const BIL_MAX = 60 * BIL_POINTS.correct;
 
 // ---------------------------------------------------------------
 // РФМШ — 1–10 сұрақ 3 ұпай, 11–20 сұрақ 5 ұпай, 21–30 сұрақ 7 ұпай

@@ -8,8 +8,12 @@ import {
   SUBJECT_MAX_COUNT,
   SUBJECT_LABELS,
   MONOLINGUAL_SUBJECTS,
+  PARTIAL_PASSAGE_SUBJECTS,
   type SubjectKey,
 } from "@/lib/questions/subjects";
+
+// БИЛ-де 1–50 сұрақ мәтінсіз. Осы белгі «мәтінсіз сұрақтар» тобын білдіреді.
+const NO_PASSAGE = "__none__";
 
 type Topic = { id: string; name_kk: string; name_ru: string };
 type Choice = { text_kk: string; text_ru: string; correct: boolean };
@@ -34,6 +38,8 @@ export default function PassageQuestionEntryPage() {
   const subject = (searchParams.get("subject") ?? "tilder") as SubjectKey;
   // Тілдер бір тілде жазылады — аударма өрістері мүлдем көрсетілмейді.
   const monolingual = MONOLINGUAL_SUBJECTS.includes(subject);
+  // Мәтінсіз сұрақтар тобы тек БИЛ-де керек: тілдерде барлық сұрақ мәтінмен.
+  const allowNoPassage = PARTIAL_PASSAGE_SUBJECTS.includes(subject);
   const max = SUBJECT_MAX_COUNT[subject];
 
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -81,15 +87,35 @@ export default function PassageQuestionEntryPage() {
 
   const loadQuestionsForPassage = useCallback(
     async (passageId: string) => {
-      const { data } = await supabase
+      let query = supabase
         .from("questions")
-        .select("id, question_number, topic_id, text_kk, text_ru, choices")
-        .eq("passage_id", passageId)
-        .order("question_number");
+        .select("id, question_number, topic_id, text_kk, text_ru, choices");
+
+      if (passageId === NO_PASSAGE) {
+        // Мәтінге байланбаған сұрақтар — пән мен нұсқа бойынша сүземіз.
+        query = query
+          .eq("session_id", sessionId)
+          .eq("subject", subject)
+          .eq("variant_number", variant)
+          .is("passage_id", null);
+      } else {
+        query = query.eq("passage_id", passageId);
+      }
+
+      const { data } = await query.order("question_number");
       setQuestions((data ?? []) as QuestionRow[]);
     },
-    []
+    [sessionId, subject, variant]
   );
+
+  async function selectNoPassage() {
+    setActivePassageId(NO_PASSAGE);
+    setPassageTextKk("");
+    setPassageTextRu("");
+    setDraftOpen(false);
+    setEditingQuestionId(null);
+    await loadQuestionsForPassage(NO_PASSAGE);
+  }
 
   async function selectPassage(p: Passage) {
     setActivePassageId(p.id);
@@ -228,7 +254,7 @@ export default function PassageQuestionEntryPage() {
 
   async function handleSaveDraftQuestion() {
     if (!activePassageId) {
-      setError("Алдымен мәтінді сақтаңыз.");
+      setError("Алдымен мәтінді сақтаңыз немесе «Мәтінсіз сұрақтар» тобын таңдаңыз.");
       return;
     }
     if (!draftTopic) return setError("Тема таңдалмаған.");
@@ -272,7 +298,7 @@ export default function PassageQuestionEntryPage() {
         subject,
         variant_number: variant,
         question_number: nextNumber,
-        passage_id: activePassageId,
+        passage_id: activePassageId === NO_PASSAGE ? null : activePassageId,
         topic_id: draftTopic,
         text_kk: draftKk,
         text_ru: finalRu,
@@ -302,6 +328,16 @@ export default function PassageQuestionEntryPage() {
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        {allowNoPassage && (
+          <button
+            onClick={selectNoPassage}
+            className={`focus-ring rounded-full px-4 py-1.5 text-sm font-semibold ${
+              activePassageId === NO_PASSAGE ? "bg-admin text-white" : "bg-admin-soft text-admin"
+            }`}
+          >
+            Мәтінсіз сұрақтар
+          </button>
+        )}
         {passages.map((p, i) => (
           <button
             key={p.id}
@@ -321,6 +357,8 @@ export default function PassageQuestionEntryPage() {
         </button>
       </div>
 
+      {/* Мәтінсіз топты таңдағанда мәтін редакторы керек емес */}
+      {activePassageId !== NO_PASSAGE && (
       <div className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
         {!monolingual && (
           <label className="flex items-center gap-2 text-sm text-ink/70">
@@ -362,6 +400,7 @@ export default function PassageQuestionEntryPage() {
           {savingPassage ? "Сақталуда..." : "Мәтінді сақтау"}
         </button>
       </div>
+      )}
 
       {activePassageId && (
         <div className="mt-4 flex flex-col gap-3">

@@ -3,8 +3,7 @@ export type SubjectKey =
   | "sandyq"
   | "zharatylystanu"
   | "tilder"
-  | "bil_math"
-  | "bil_reading"
+  | "bil"
   | "rfmsh";
 
 export const SUBJECT_MINUTES: Record<SubjectKey, number> = {
@@ -12,8 +11,7 @@ export const SUBJECT_MINUTES: Record<SubjectKey, number> = {
   sandyq: 30,
   zharatylystanu: 30,
   tilder: 120,
-  bil_math: 92,
-  bil_reading: 18,
+  bil: 110,
   rfmsh: 120,
 };
 
@@ -22,8 +20,7 @@ export const SUBJECT_MAX_COUNT: Record<SubjectKey, number> = {
   sandyq: 60,
   zharatylystanu: 20,
   tilder: 60,
-  bil_math: 50,
-  bil_reading: 10,
+  bil: 60,
   rfmsh: 30,
 };
 
@@ -32,8 +29,7 @@ export const SUBJECT_LABELS: Record<SubjectKey, string> = {
   sandyq: "Сандық сипаттамалар / Количественные характеристики",
   zharatylystanu: "Жаратылыстану / Естествознание",
   tilder: "Тілдер / Языки",
-  bil_math: "БИЛ — математика",
-  bil_reading: "БИЛ — оқылым",
+  bil: "БИЛ",
   rfmsh: "РФМШ / РФММ",
 };
 
@@ -50,9 +46,13 @@ export const QUANTITY_CHOICE_LABELS: Record<"A" | "B" | "C" | "D", { kk: string;
 // БИЛ-математика style: plain ABCD question list). Сандық has its own
 // quantity-comparison form; Тілдер/БИЛ-оқылым use the passage-based form;
 // РФМШ has no answer choices at all.
-export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math", "zharatylystanu", "bil_math"];
+export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math", "zharatylystanu"];
 export const QUANTITY_SUBJECTS: SubjectKey[] = ["sandyq"];
-export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder", "bil_reading"];
+export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder", "bil"];
+
+// БИЛ-де 1–50 сұрақтың мәтіні жоқ, тек 51–60 мәтінмен. Сондықтан енгізу
+// формасында «мәтінсіз сұрақтар» тобы болуы керек.
+export const PARTIAL_PASSAGE_SUBJECTS: SubjectKey[] = ["bil"];
 
 // Тілдер жалғыз тілде жазылады (қазақ бөлімі қазақша, орыс бөлімі орысша,
 // ағылшын бөлімі ағылшынша) — аударманың мағынасы жоқ. БИЛ-оқылым екі тілде.
@@ -65,10 +65,17 @@ export const TILDER_SECTIONS = [
   { key: "tilder_ru", label: "Орыс тілі", from: 21, to: 40, maxScore: 200 },
   { key: "tilder_en", label: "Ағылшын тілі", from: 41, to: 60, maxScore: 200 },
 ] as const;
+
+// БИЛ 60 сұрақ: 1–50 математика-логика, 51–60 оқу сауаттылығы.
+// Бір блок, бір уақыт — нәтиже ғана бөлек көрсетіледі.
+export const BIL_QUESTION_SECTIONS = [
+  { key: "bil_math", label: "Математика-логика", from: 1, to: 50 },
+  { key: "bil_reading", label: "Оқу сауаттылығы", from: 51, to: 60 },
+] as const;
 export const NUMERIC_SUBJECTS: SubjectKey[] = ["rfmsh"];
 
 export const TEST_TYPE_SUBJECTS: Record<string, SubjectKey[]> = {
   NIS: ["math", "sandyq", "zharatylystanu", "tilder"],
-  BIL: ["bil_math", "bil_reading"],
+  BIL: ["bil"],
   RFMS: ["rfmsh"],
 };

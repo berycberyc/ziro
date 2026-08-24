@@ -24,7 +24,7 @@ import {
   type Sheet,
   type Student,
 } from "@/lib/scoring/engine";
-import { NIS_SECTIONS, RFMSH_MAX, BIL_SECTIONS } from "@/lib/scoring/rules";
+import { NIS_SECTIONS, RFMSH_MAX, BIL_SECTIONS, BIL_MAX } from "@/lib/scoring/rules";
 
 type Session = { id: string; title_kk: string; title_ru: string; session_date: string };
 type Mismatch = {
@@ -40,8 +40,7 @@ const IMPORT_SUBJECTS: SubjectKey[] = [
   "sandyq",
   "zharatylystanu",
   "tilder",
-  "bil_math",
-  "bil_reading",
+  "bil",
   "rfmsh",
 ];
 
@@ -488,33 +487,50 @@ export default function ScoringPage() {
       }
 
       // ---- БИЛ ----
-      const bilSheets = sheets.filter((s) => TEST_TYPE_SUBJECTS.BIL.includes(s.subject));
+      const bilSheets = sheets.filter((s) => s.subject === "bil");
       if (bilSheets.length > 0) {
         const results = scoreBil(bilSheets, key, students);
         const wb = XLSX.utils.book_new();
+        // Бағандар ресми БИЛ рейтингіндегідей: әр бөлім бойынша дұрыс/қате
+        // саны мен ұпайы, сосын жалпы.
         const head = [
           "Орын",
           "ZipGrade ID",
           "Аты",
           "Тегі",
-          ...BIL_SECTIONS.map((s) => s.label),
-          "Жалпы",
-          "Дұрыс",
-          "Қате",
-          "Бос",
+          ...BIL_SECTIONS.flatMap((s) => [
+            `${s.label} — дұрыс`,
+            `${s.label} — қате`,
+            `${s.label} — бос`,
+            `${s.label} — ұпай`,
+          ]),
+          "Жалпы дұрыс",
+          "Жалпы қате",
+          "Жалпы бос",
+          "Жалпы ұпай",
         ];
         const body = results.map((r) => [
           r.rank,
           r.zipgrade_id,
           r.first_name,
           r.last_name,
-          ...BIL_SECTIONS.map((s) => r.scores[s.key] ?? 0),
-          r.total,
+          ...BIL_SECTIONS.flatMap((s) => [
+            r.breakdown[s.key]?.correct ?? 0,
+            r.breakdown[s.key]?.wrong ?? 0,
+            r.breakdown[s.key]?.blank ?? 0,
+            r.scores[s.key] ?? 0,
+          ]),
           r.correct,
           r.wrong,
           r.blank,
+          r.total,
         ]);
-        const note = [[], ["Ескертпе:"], ["Дұрыс жауап +4, бос 0, қате −1. Қосарлы белгі қате деп саналады."]];
+        const note = [
+          [],
+          ["Ескертпе:"],
+          ["Дұрыс жауап +4, бос 0, қате −1. Қосарлы белгі қате деп саналады."],
+          [`1–50 сұрақ — математика-логика, 51–60 — оқу сауаттылығы. Максимум ${BIL_MAX}.`],
+        ];
         XLSX.utils.book_append_sheet(
           wb,
           XLSX.utils.aoa_to_sheet([head, ...body, ...note]),

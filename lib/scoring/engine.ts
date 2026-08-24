@@ -237,54 +237,74 @@ export type SimpleResult = {
   rank: number;
 };
 
+export type BilResult = SimpleResult & {
+  /** бөлім кілті -> { дұрыс, қате, бос } */
+  breakdown: Record<string, { correct: number; wrong: number; blank: number }>;
+};
+
+/**
+ * БИЛ — бір пән, 60 сұрақ. Ұпай бүкіл параққа ортақ ережемен саналады
+ * (дұрыс +4, қате −1, бос 0), бірақ нәтиже екі бөлікке бөлініп көрсетіледі:
+ * 1–50 математика-логика, 51–60 оқу сауаттылығы.
+ */
 export function scoreBil(
   sheets: Sheet[],
   key: AnswerKeyItem[],
   students: Map<string, Student>
-): SimpleResult[] {
+): BilResult[] {
   const lookup = keyLookup(key);
-  const ids = new Set(sheets.map((s) => s.zipgrade_id));
-  const results: SimpleResult[] = [];
+  const bilSheets = sheets.filter((s) => s.subject === "bil");
+  const results: BilResult[] = [];
 
-  ids.forEach((id) => {
+  bilSheets.forEach((sheet) => {
     const scores: Record<string, number> = {};
+    const breakdown: Record<string, { correct: number; wrong: number; blank: number }> = {};
     let correct = 0;
     let wrong = 0;
     let blank = 0;
 
-    BIL_SECTIONS.forEach((section) => {
-      const sheet = sheets.find((s) => s.zipgrade_id === id && s.subject === section.subject);
-      const qnums = key
-        .filter((k) => k.subject === section.subject)
-        .map((k) => k.question_number);
-      const unique = [...new Set(qnums)].sort((a, b) => a - b);
+    const allQnums = [
+      ...new Set(
+        key
+          .filter((k) => k.subject === "bil" && k.variant_number === sheet.variant_number)
+          .map((k) => k.question_number)
+      ),
+    ].sort((a, b) => a - b);
 
+    BIL_SECTIONS.forEach((section) => {
       let score = 0;
-      unique.forEach((qnum) => {
-        const v = judge(
-          sheet?.answers[qnum],
-          lookup(section.subject, sheet?.variant_number ?? 1, qnum)
-        );
-        if (v === "correct") {
-          score += BIL_POINTS.correct;
-          correct++;
-        } else if (v === "wrong") {
-          score += BIL_POINTS.wrong;
-          wrong++;
-        } else {
-          score += BIL_POINTS.blank;
-          blank++;
-        }
-      });
+      const tally = { correct: 0, wrong: 0, blank: 0 };
+
+      allQnums
+        .filter((qnum) => qnum >= section.from && qnum <= section.to)
+        .forEach((qnum) => {
+          const v = judge(sheet.answers[qnum], lookup("bil", sheet.variant_number, qnum));
+          if (v === "correct") {
+            score += BIL_POINTS.correct;
+            tally.correct++;
+            correct++;
+          } else if (v === "wrong") {
+            score += BIL_POINTS.wrong;
+            tally.wrong++;
+            wrong++;
+          } else {
+            score += BIL_POINTS.blank;
+            tally.blank++;
+            blank++;
+          }
+        });
+
       scores[section.key] = score;
+      breakdown[section.key] = tally;
     });
 
-    const student = students.get(id);
+    const student = students.get(sheet.zipgrade_id);
     results.push({
-      zipgrade_id: id,
+      zipgrade_id: sheet.zipgrade_id,
       first_name: student?.first_name ?? "",
       last_name: student?.last_name ?? "",
       scores,
+      breakdown,
       correct,
       wrong,
       blank,
