@@ -4,13 +4,12 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
 import { REGIONS } from "@/lib/kzRegions";
+import PhotoPicker from "@/components/PhotoPicker";
 
 const CONSENT_TEXT_KK =
   "Мен, көрсетілген оқушының ата-анасы/заңды өкілі бола отырып, «Дербес деректер және оларды қорғау туралы» Қазақстан Республикасының Заңына сәйкес, баланың дербес деректерін (аты-жөні, ЖСН, туған күні, фотосурет және осы нысанда көрсетілген өзге де деректер) сынақ тестілеуін ұйымдастыру және өткізу мақсатында жинауға және өңдеуге келісім беремін.";
 const CONSENT_TEXT_RU =
   "Я, являясь родителем/законным представителем указанного ученика, даю согласие на сбор и обработку персональных данных ребёнка (ФИО, ИИН, дата рождения, фотография и иные данные, указанные в этой форме) в целях организации и проведения пробного тестирования, в соответствии с Законом Республики Казахстан «О персональных данных и их защите».";
-
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
 
 export default function AddStudentForm({
   parentId,
@@ -30,31 +29,11 @@ export default function AddStudentForm({
   const [iin, setIin] = useState("");
   const [language, setLanguage] = useState("kk");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  // Ученик қосылғаннан кейін PhotoPicker-ді толық тазарту үшін.
+  const [photoPickerKey, setPhotoPickerKey] = useState(0);
   const [consentChecked, setConsentChecked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    setError("");
-    if (!file) {
-      setPhotoFile(null);
-      return;
-    }
-    if (!file.type.startsWith("image/")) {
-      setError(t.photoInvalidType);
-      e.target.value = "";
-      setPhotoFile(null);
-      return;
-    }
-    if (file.size > MAX_PHOTO_BYTES) {
-      setError(t.photoTooLarge);
-      e.target.value = "";
-      setPhotoFile(null);
-      return;
-    }
-    setPhotoFile(file);
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,8 +47,8 @@ export default function AddStudentForm({
     let photoUrl: string | null = null;
 
     if (photoFile) {
-      const ext = photoFile.name.split(".").pop();
-      const path = `${parentId}/${Date.now()}.${ext}`;
+      // PhotoPicker әрқашан 3:4 JPEG қайтарады.
+      const path = `${parentId}/${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from("student-photos")
         .upload(path, photoFile, { upsert: false });
@@ -121,6 +100,7 @@ export default function AddStudentForm({
     setSchool("");
     setIin("");
     setPhotoFile(null);
+    setPhotoPickerKey((k) => k + 1);
     setConsentChecked(false);
     onAdded();
   }
@@ -213,14 +193,7 @@ export default function AddStudentForm({
       </select>
 
       <div className="sm:col-span-2">
-        <label className="mb-1 block text-sm font-medium text-ink/70">{t.photoLabel}</label>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handlePhotoChange}
-          className="focus-ring block w-full rounded-xl border border-ink/15 px-3 py-2 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-parent-soft file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-parent"
-        />
-        <p className="mt-1 text-xs text-ink/50">{t.photoNote}</p>
+        <PhotoPicker key={photoPickerKey} onChange={setPhotoFile} />
       </div>
 
       <div className="sm:col-span-2">

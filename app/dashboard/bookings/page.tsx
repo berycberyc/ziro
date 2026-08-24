@@ -327,7 +327,10 @@ export default function BookingsPage() {
                       {t.dateLabel}: {b.session?.session_date}
                       {b.session?.start_time ? ` · ${b.session.start_time}` : ""}
                     </p>
-                    {b.session?.address && (
+                    <p className="font-mono text-xs text-ink/60">
+                      {t.formatLabel}: {b.format === "online" ? t.online : t.offline}
+                    </p>
+                    {b.format !== "online" && b.session?.address && (
                       <p className="font-mono text-xs text-ink/60">
                         {t.addressLabel}: {b.session.address}
                       </p>
@@ -494,20 +497,41 @@ export default function BookingsPage() {
                     {t.passLabel}
                   </p>
 
-                  <div
-                    style={{
-                      width: "220px",
-                      height: "280px",
-                      borderRadius: "16px",
-                      overflow: "hidden",
-                      border: "4px solid #F3F5F2",
-                      boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-                      background: b.student?.photo_url
-                        ? `#d9d9d9 url(${b.student.photo_url}) center / cover no-repeat`
-                        : "#d9d9d9",
-                      marginBottom: "28px",
-                    }}
-                  />
+                  {/* Фото 3:4 болып кесілген күйінде келеді, сондықтан оны
+                      нақты өлшеммен <img> ретінде саламыз — html2canvas-тың
+                      background-size/object-fit-ті дұрыс оқуына тәуелді емеспіз. */}
+                  {b.student?.photo_url ? (
+                    <img
+                      src={b.student.photo_url}
+                      alt=""
+                      crossOrigin="anonymous"
+                      width={210}
+                      height={280}
+                      style={{
+                        display: "block",
+                        boxSizing: "content-box",
+                        width: "210px",
+                        height: "280px",
+                        borderRadius: "16px",
+                        border: "4px solid #F3F5F2",
+                        boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+                        marginBottom: "28px",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        boxSizing: "content-box",
+                        width: "210px",
+                        height: "280px",
+                        borderRadius: "16px",
+                        border: "4px solid #F3F5F2",
+                        boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+                        background: "#d9d9d9",
+                        marginBottom: "28px",
+                      }}
+                    />
+                  )}
 
                   <p style={{ fontSize: "30px", fontWeight: 800, color: "#16233F", margin: "0 0 8px 0", textAlign: "center" }}>
                     {b.student?.full_name}
@@ -552,6 +576,12 @@ export default function BookingsPage() {
                       <span style={{ fontWeight: 700, color: "#16233F" }}>{testTypeName}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
+                      <span style={{ color: "#8a8a8a" }}>{t.formatLabel}</span>
+                      <span style={{ fontWeight: 700, color: "#16233F" }}>
+                        {b.format === "online" ? t.online : t.offline}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
                       <span style={{ color: "#8a8a8a" }}>{t.sessionLabel}</span>
                       <span style={{ fontWeight: 700, color: "#16233F", textAlign: "right" }}>{sessionTitle}</span>
                     </div>
@@ -564,7 +594,7 @@ export default function BookingsPage() {
                         {b.session?.start_time ? `, ${b.session.start_time}` : ""}
                       </span>
                     </div>
-                    {b.session?.address && (
+                    {b.format !== "online" && b.session?.address && (
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px" }}>
                         <span style={{ color: "#8a8a8a" }}>{t.addressLabel}</span>
                         <span style={{ fontWeight: 700, color: "#16233F", textAlign: "right" }}>{b.session.address}</span>

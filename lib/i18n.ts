@@ -111,6 +111,18 @@ export const dict = {
       "Фото ақ фонда, тура қарап тұрған түрде түсірілуі керек. Максималды өлшемі — 5МБ.",
     photoTooLarge: "Файл тым үлкен (максимум 5МБ).",
     photoInvalidType: "Тек сурет файлын (JPG, PNG) жүктеуге болады.",
+    photoTakePhoto: "Суретке түсіру",
+    photoChooseFile: "Галереядан таңдау",
+    photoChangeButton: "Фотоны ауыстыру",
+    photoReady: "Фото дайын",
+    photoCropTitle: "Фотоны кесу",
+    photoCropHint:
+      "Саусақпен жылжытыңыз, екі саусақпен үлкейтіңіз. Бет рамканың ішіне толық сыюы керек.",
+    photoCropZoom: "Масштаб",
+    photoCropRotate: "Бұру",
+    photoCropConfirm: "Дайын",
+    photoCropCancel: "Болдырмау",
+    photoCropProcessing: "Өңделуде...",
 
     // Tests page
     testsPageTitle: "Тесттер",
@@ -124,6 +136,7 @@ export const dict = {
     statusPaid: "Төленді",
     statusPending: "Төлем күтілуде",
     testTypeLabel: "Тест түрі",
+    formatLabel: "Формат",
     dateLabel: "Күні",
     timeLabel: "Уақыты",
     addressLabel: "Мекенжай",
@@ -281,6 +294,18 @@ export const dict = {
       "Фото должно быть на белом фоне, лицо строго анфас. Максимальный размер — 5МБ.",
     photoTooLarge: "Файл слишком большой (максимум 5МБ).",
     photoInvalidType: "Можно загружать только изображения (JPG, PNG).",
+    photoTakePhoto: "Сфотографировать",
+    photoChooseFile: "Выбрать из галереи",
+    photoChangeButton: "Заменить фото",
+    photoReady: "Фото готово",
+    photoCropTitle: "Обрезка фото",
+    photoCropHint:
+      "Двигайте пальцем, увеличивайте двумя пальцами. Лицо должно полностью помещаться в рамку.",
+    photoCropZoom: "Масштаб",
+    photoCropRotate: "Повернуть",
+    photoCropConfirm: "Готово",
+    photoCropCancel: "Отмена",
+    photoCropProcessing: "Обработка...",
 
     // Tests page
     testsPageTitle: "Тесты",
@@ -294,6 +319,7 @@ export const dict = {
     statusPaid: "Оплачено",
     statusPending: "Ожидает оплаты",
     testTypeLabel: "Тип теста",
+    formatLabel: "Формат",
     dateLabel: "Дата",
     timeLabel: "Время",
     addressLabel: "Адрес",

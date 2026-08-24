@@ -4,8 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useLang } from "@/lib/LangContext";
 import { REGIONS } from "@/lib/kzRegions";
-
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
+import PhotoPicker from "@/components/PhotoPicker";
 
 type Student = {
   id: string;
@@ -49,28 +48,6 @@ export default function EditStudentForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    setError("");
-    if (!file) {
-      setPhotoFile(null);
-      return;
-    }
-    if (!file.type.startsWith("image/")) {
-      setError(t.photoInvalidType);
-      e.target.value = "";
-      setPhotoFile(null);
-      return;
-    }
-    if (file.size > MAX_PHOTO_BYTES) {
-      setError(t.photoTooLarge);
-      e.target.value = "";
-      setPhotoFile(null);
-      return;
-    }
-    setPhotoFile(file);
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -85,8 +62,8 @@ export default function EditStudentForm({
     let photoUrl = student.photo_url;
 
     if (photoFile) {
-      const ext = photoFile.name.split(".").pop();
-      const path = `${parentId}/${Date.now()}.${ext}`;
+      // PhotoPicker әрқашан 3:4 JPEG қайтарады.
+      const path = `${parentId}/${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from("student-photos")
         .upload(path, photoFile, { upsert: false });
@@ -221,17 +198,7 @@ export default function EditStudentForm({
       </select>
 
       <div className="sm:col-span-2">
-        <label className="mb-1 block text-sm font-medium text-ink/70">{t.photoLabel}</label>
-        {student.photo_url && !photoFile && (
-          <img src={student.photo_url} alt="" className="mb-2 h-14 w-14 rounded-full object-cover" />
-        )}
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handlePhotoChange}
-          className="focus-ring block w-full rounded-xl border border-ink/15 px-3 py-2 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-parent-soft file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-parent"
-        />
-        <p className="mt-1 text-xs text-ink/50">{t.photoNote}</p>
+        <PhotoPicker existingUrl={student.photo_url} onChange={setPhotoFile} />
       </div>
 
       <div className="flex gap-3 sm:col-span-2">
