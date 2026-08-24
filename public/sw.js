@@ -10,9 +10,13 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener("fetch", (event) => {
-  // Plain passthrough — no offline caching, just needed for installability.
-  event.respondWith(fetch(event.request));
+// МАҢЫЗДЫ: бұл жерде event.respondWith(fetch(...)) ҚОЛДАНУҒА БОЛМАЙДЫ.
+// Ол барлық сұранысты service worker арқылы өткізеді, ал желі сәл
+// іркілсе — промис қабылданбай, бет "network error" болып ашылмай қалады
+// (онлайн тест беті осыдан ашылмады). Chrome-ға орнатылатын болу үшін
+// fetch тыңдаушысының болуы жеткілікті, оның ішіне ештеңе жазудың қажеті жоқ.
+self.addEventListener("fetch", () => {
+  // Әдейі бос: ешбір сұранысқа араласпаймыз, бәрі браузердің өзі арқылы кетеді.
 });
 
 self.addEventListener("push", (event) => {

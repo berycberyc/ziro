@@ -31,6 +31,11 @@ export const metadata: Metadata = {
     title: "Ziro",
     statusBarStyle: "default",
   },
+  other: {
+    // appleWebApp ескірген apple-mobile-web-app-capable метасын қосады,
+    // Chrome оның орнына мынаны күтеді.
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {
