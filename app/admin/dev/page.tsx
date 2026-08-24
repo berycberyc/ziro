@@ -10,6 +10,13 @@ type TrialTest = { id: string; title_kk: string; title_ru: string; session_date:
 
 export default function DevToolsPage() {
   const [trialTests, setTrialTests] = useState<TrialTest[]>([]);
+
+  const [ofertaKk, setOfertaKk] = useState("");
+  const [ofertaRu, setOfertaRu] = useState("");
+  const [ofertaLoading, setOfertaLoading] = useState(true);
+  const [ofertaSaving, setOfertaSaving] = useState(false);
+  const [ofertaSaved, setOfertaSaved] = useState(false);
+  const [ofertaError, setOfertaError] = useState("");
   const [selectedId, setSelectedId] = useState("");
 
   const [copySubject, setCopySubject] = useState<SubjectKey>("math");
@@ -28,7 +35,36 @@ export default function DevToolsPage() {
       .select("id, title_kk, title_ru, session_date")
       .order("session_date", { ascending: false })
       .then(({ data }) => setTrialTests(data ?? []));
+
+    supabase
+      .from("legal_documents")
+      .select("text_kk, text_ru")
+      .eq("key", "oferta")
+      .single()
+      .then(({ data }) => {
+        setOfertaKk(data?.text_kk ?? "");
+        setOfertaRu(data?.text_ru ?? "");
+        setOfertaLoading(false);
+      });
   }, []);
+
+  async function handleSaveOferta() {
+    setOfertaSaving(true);
+    setOfertaSaved(false);
+    setOfertaError("");
+    try {
+      const { error } = await supabase
+        .from("legal_documents")
+        .update({ text_kk: ofertaKk, text_ru: ofertaRu, updated_at: new Date().toISOString() })
+        .eq("key", "oferta");
+      if (error) throw error;
+      setOfertaSaved(true);
+    } catch (err: any) {
+      setOfertaError("Қате шықты: " + (err?.message ?? "белгісіз қате"));
+    } finally {
+      setOfertaSaving(false);
+    }
+  }
 
   async function handleCopyVariant() {
     if (!selectedId) return;
@@ -265,6 +301,56 @@ export default function DevToolsPage() {
           {exporting ? "Жүктелуде..." : "Excel-ге жүктеп алу"}
         </button>
         {exportError && <p className="mt-2 text-sm text-red-600">{exportError}</p>}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-ink/10 bg-white p-5">
+        <h2 className="font-display text-lg font-bold text-ink">Оферта мәтінін өңдеу</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          /oferta бетінде көрсетілетін мәтін. Заңгермен келісілгеннен кейін ғана өзгертіңіз.
+        </p>
+
+        {ofertaLoading ? (
+          <p className="mt-3 text-sm text-ink/50">Жүктелуде...</p>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink/50">Қазақша</label>
+                <textarea
+                  value={ofertaKk}
+                  onChange={(e) => {
+                    setOfertaKk(e.target.value);
+                    setOfertaSaved(false);
+                  }}
+                  rows={16}
+                  className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 font-mono text-xs leading-relaxed"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink/50">Русский</label>
+                <textarea
+                  value={ofertaRu}
+                  onChange={(e) => {
+                    setOfertaRu(e.target.value);
+                    setOfertaSaved(false);
+                  }}
+                  rows={16}
+                  className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 font-mono text-xs leading-relaxed"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveOferta}
+              disabled={ofertaSaving}
+              className="focus-ring mt-4 rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {ofertaSaving ? "Сақталуда..." : "Сақтау"}
+            </button>
+            {ofertaSaved && <p className="mt-2 text-sm text-parent">Сақталды ✓</p>}
+            {ofertaError && <p className="mt-2 text-sm text-red-600">{ofertaError}</p>}
+          </>
+        )}
       </section>
     </div>
   );
