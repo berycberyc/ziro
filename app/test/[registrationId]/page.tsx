@@ -51,6 +51,7 @@ export default function TestTakingPage() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [consentChecked, setConsentChecked] = useState(false);
   const [finalScoreNote, setFinalScoreNote] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const phaseRef = useRef(phase);
   const qIndexRef = useRef(qIndex);
@@ -75,13 +76,14 @@ export default function TestTakingPage() {
 
   const loadQuestionsForSubject = useCallback(
     async (subject: SubjectKey, variant: number, sid: string) => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("questions_public")
         .select("id, question_number, text_kk, text_ru, image_url, answer_format, choices, column_a_kk, column_a_ru, column_b_kk, column_b_ru, passage_id")
         .eq("session_id", sid)
         .eq("subject", subject)
         .eq("variant_number", variant)
         .order("question_number");
+      if (error) throw error;
       setQuestions((data as any) ?? []);
       setQIndex(0);
       setPendingChoice(null);
@@ -105,18 +107,17 @@ export default function TestTakingPage() {
         setPassageCache({});
         setPassageText(null);
       }
+
+      return ((data as any) ?? []).length;
     },
     [lang]
   );
 
   useEffect(() => {
     async function init() {
-      const { data: reg } = await supabase
-        .from("registrations")
-        .select("test_session_id, test_variant")
-        .eq("id", registrationId)
-        .maybeSingle();
-
+      // Оқушы жүйеге кірмей тест тапсырады (anon рөлі), сондықтан
+      // registrations кестесін тікелей оқи алмайды — RLS рұқсат бермейді.
+      // session_id мен нұсқа нөмірін security definer RPC-дің өзі қайтарады.
       const { data, error } = await supabase.rpc("start_test_attempt", {
         p_registration_id: registrationId,
       });
@@ -128,10 +129,22 @@ export default function TestTakingPage() {
       }
 
       const result = data as any;
-      setBlocks(result.blocks ?? []);
+
+      if (!result.session_id) {
+        setErrorMsg("Сессия деректері табылмады. Ұйымдастырушыға хабарласыңыз.");
+        setPhase("error");
+        return;
+      }
+      if (!result.blocks || result.blocks.length === 0) {
+        setErrorMsg("Бұл тест түріне пәндер тізімі бапталмаған.");
+        setPhase("error");
+        return;
+      }
+
+      setBlocks(result.blocks);
       setSubjectIndex(result.current_subject_index ?? 0);
-      setVariantNumber(parseInt(String(reg?.test_variant ?? "1"), 10) || 1);
-      setSessionId(reg?.test_session_id ?? null);
+      setVariantNumber(Number(result.variant_number) || 1);
+      setSessionId(result.session_id);
 
       if (result.status === "submitted") {
         setPhase("finished");
@@ -153,10 +166,32 @@ export default function TestTakingPage() {
   }
 
   async function handleStartSubject() {
-    if (!currentSubject || !sessionId) return;
-    await loadQuestionsForSubject(currentSubject, variantNumber, sessionId);
-    setSecondsLeft(SUBJECT_MINUTES[currentSubject] * 60);
-    setPhase("question");
+    // Бұрын мұнда үнсіз return тұрған — түйме басылса да ештеңе болмайтын.
+    // Енді себебі экранға шығады.
+    if (!currentSubject || !sessionId) {
+      setErrorMsg("Тестті бастау мүмкін болмады. Бетті жаңартып көріңіз.");
+      setPhase("error");
+      return;
+    }
+    if (starting) return;
+
+    setStarting(true);
+    try {
+      const loaded = await loadQuestionsForSubject(currentSubject, variantNumber, sessionId);
+      if (loaded === 0) {
+        setErrorMsg("Бұл пән бойынша сұрақтар табылмады. Ұйымдастырушыға хабарласыңыз.");
+        setPhase("error");
+        return;
+      }
+      setSecondsLeft(SUBJECT_MINUTES[currentSubject] * 60);
+      setPhase("question");
+    } catch (err) {
+      console.error("Failed to start subject:", err);
+      setErrorMsg("Сұрақтарды жүктеу кезінде қате шықты. Интернетті тексеріп, қайталаңыз.");
+      setPhase("error");
+    } finally {
+      setStarting(false);
+    }
   }
 
   const submitCurrentAsBlank = useCallback(async () => {
@@ -316,9 +351,10 @@ export default function TestTakingPage() {
           )}
           <button
             onClick={handleStartSubject}
-            className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5"
+            disabled={starting}
+            className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {phase === "break" ? "Келесі пәнге өту" : "Бастау"}
+            {starting ? "Жүктелуде..." : phase === "break" ? "Келесі пәнге өту" : "Бастау"}
           </button>
         </div>
       </div>
