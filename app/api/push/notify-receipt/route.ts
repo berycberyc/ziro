@@ -2,22 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 
-webpush.setVapidDetails(
-  "mailto:gulzhanmin1@gmail.com",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
-
-// Uses the service-role key since this route is called server-to-server
-// by a database trigger (pg_net), not by a logged-in user — there's no
-// session to authenticate against RLS with.
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function POST(req: NextRequest) {
   try {
+    const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!vapidPublic || !vapidPrivate || !supabaseUrl || !serviceRoleKey) {
+      console.error("notify-receipt: missing required env vars");
+      return NextResponse.json({ error: "server not configured" }, { status: 500 });
+    }
+
+    webpush.setVapidDetails("mailto:gulzhanmin1@gmail.com", vapidPublic, vapidPrivate);
+
+    // Uses the service-role key since this route is called server-to-server
+    // by a database trigger (pg_net), not by a logged-in user — there's no
+    // session to authenticate against RLS with.
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
     const { registrationId } = await req.json();
     if (!registrationId) {
       return NextResponse.json({ error: "registrationId required" }, { status: 400 });

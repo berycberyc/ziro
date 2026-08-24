@@ -31,6 +31,13 @@ export default function PushNotificationButton() {
     setError("");
 
     try {
+      const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidPublic) {
+        setError("Серверде әлі баптау аяқталмаған. Кейінірек көріңіз.");
+        setLoading(false);
+        return;
+      }
+
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         setError("Рұқсат берілмеді. Браузер баптауларынан қосуға болады.");
@@ -41,7 +48,7 @@ export default function PushNotificationButton() {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+        applicationServerKey: urlBase64ToUint8Array(vapidPublic),
       });
 
       const { data: userData } = await supabase.auth.getUser();
