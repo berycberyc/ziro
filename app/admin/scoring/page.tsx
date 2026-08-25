@@ -20,9 +20,12 @@ import {
   scoreBil,
   scoreRfmsh,
   judge,
+  topicBreakdown,
+  rfmshBands,
   type AnswerKeyItem,
   type Sheet,
   type Student,
+  type TopicRow,
 } from "@/lib/scoring/engine";
 import { NIS_SECTIONS, RFMSH_MAX, BIL_SECTIONS, BIL_MAX } from "@/lib/scoring/rules";
 
@@ -53,6 +56,8 @@ export default function ScoringPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [mismatches, setMismatches] = useState<Mismatch[]>([]);
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState(false);
 
   useEffect(() => {
     supabase
@@ -86,7 +91,14 @@ export default function ScoringPage() {
   };
 
   useEffect(() => {
-    if (selectedId) refreshCounts(selectedId);
+    if (!selectedId) return;
+    refreshCounts(selectedId);
+    supabase
+      .from("test_sessions")
+      .select("results_published_at")
+      .eq("id", selectedId)
+      .single()
+      .then(({ data }) => setPublishedAt((data as any)?.results_published_at ?? null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -632,6 +644,177 @@ export default function ScoringPage() {
     }
   }
 
+  /** Сұрақтардың тақырыбын жинау: пән|нұсқа|нөмір -> тақырып. */
+  async function loadTopicMap(sessionId: string) {
+    const rows = await fetchAll<any>((from, to) =>
+      supabase
+        .from("questions")
+        .select("subject, variant_number, question_number, topics ( name_kk )")
+        .eq("session_id", sessionId)
+        .not("topic_id", "is", null)
+        .order("id")
+        .range(from, to)
+    );
+    const map = new Map<string, { subject: SubjectKey; topic: string }>();
+    rows.forEach((q) => {
+      const name = q.topics?.name_kk;
+      if (!name) return;
+      map.set(`${q.subject}|${q.variant_number}|${q.question_number}`, {
+        subject: q.subject as SubjectKey,
+        topic: name,
+      });
+    });
+    return map;
+  }
+
+  // ---------------------------------------------------------------
+  // 5. Жариялау — ата-ана осы сәттен бастап нәтижесін көреді.
+  // ---------------------------------------------------------------
+  async function handlePublish() {
+    setBusy("publish");
+    setMessage("");
+    setError("");
+    setConfirmPublish(false);
+    try {
+      const [sheets, key] = await Promise.all([loadSheets(selectedId), loadAnswerKey(selectedId)]);
+      if (sheets.length === 0) {
+        setError("Жариялайтын дерек жоқ.");
+        return;
+      }
+      const students = await loadStudents([...new Set(sheets.map((s) => s.zipgrade_id))]);
+      const topicMap = await loadTopicMap(selectedId);
+      const topicsByStudent = topicBreakdown(sheets, key, topicMap);
+
+      const rows: any[] = [];
+      const topicsFor = (id: string) =>
+        (topicsByStudent.get(id) ?? []).map((t: TopicRow) => ({
+          subject: t.subject,
+          topic: t.topic,
+          correct: t.correct,
+          total: t.total,
+        }));
+
+      // ---- НИШ ----
+      const nisSheets = sheets.filter((s) => TEST_TYPE_SUBJECTS.NIS.includes(s.subject));
+      if (nisSheets.length > 0) {
+        const { results } = scoreNis(nisSheets, key, students);
+        const DAY1 = ["math", "sandyq", "zharatylystanu"];
+        const DAY2 = ["tilder_kk", "tilder_ru", "tilder_en"];
+        results.forEach((r) => {
+          const subjects: Record<string, any> = {};
+          NIS_SECTIONS.forEach((s) => {
+            subjects[s.key] = {
+              score: r.scores[s.key] ?? 0,
+              max: s.maxScore,
+              pct:
+                s.threshold != null
+                  ? Math.round(((r.scores[s.key] ?? 0) / s.maxScore) * 1000) / 10
+                  : null,
+            };
+          });
+          rows.push({
+            test_session_id: selectedId,
+            test_type_code: "NIS",
+            zipgrade_id: r.zipgrade_id,
+            place: r.rank,
+            total_score: r.total,
+            breakdown: {
+              subjects,
+              day1: DAY1.reduce((a, k) => a + (r.scores[k] ?? 0), 0),
+              day2: DAY2.reduce((a, k) => a + (r.scores[k] ?? 0), 0),
+              below: r.belowThreshold,
+            },
+            topics: topicsFor(r.zipgrade_id),
+          });
+        });
+      }
+
+      // ---- БИЛ ----
+      const bilSheets = sheets.filter((s) => s.subject === "bil");
+      if (bilSheets.length > 0) {
+        const results = scoreBil(bilSheets, key, students);
+        results.forEach((r) => {
+          const parts: Record<string, any> = {};
+          BIL_SECTIONS.forEach((s) => {
+            parts[s.key] = {
+              correct: r.breakdown[s.key]?.correct ?? 0,
+              wrong: r.breakdown[s.key]?.wrong ?? 0,
+              blank: r.breakdown[s.key]?.blank ?? 0,
+              score: r.scores[s.key] ?? 0,
+            };
+          });
+          rows.push({
+            test_session_id: selectedId,
+            test_type_code: "BIL",
+            zipgrade_id: r.zipgrade_id,
+            place: r.rank,
+            total_score: r.total,
+            breakdown: {
+              parts,
+              correct: r.correct,
+              wrong: r.wrong,
+              blank: r.blank,
+              max: BIL_MAX,
+            },
+            topics: topicsFor(r.zipgrade_id),
+          });
+        });
+      }
+
+      // ---- РФМШ ----
+      const rfmshSheets = sheets.filter((s) => s.subject === "rfmsh");
+      if (rfmshSheets.length > 0) {
+        const results = scoreRfmsh(rfmshSheets, key, students);
+        results.forEach((r) => {
+          const sheet = rfmshSheets.find((s) => s.zipgrade_id === r.zipgrade_id);
+          rows.push({
+            test_session_id: selectedId,
+            test_type_code: "RFMS",
+            zipgrade_id: r.zipgrade_id,
+            place: r.rank,
+            total_score: r.total,
+            breakdown: {
+              bands: sheet ? rfmshBands(sheet, key) : [],
+              correct: r.correct,
+              wrong: r.wrong,
+              blank: r.blank,
+              max: RFMSH_MAX,
+            },
+            topics: topicsFor(r.zipgrade_id),
+          });
+        });
+      }
+
+      // Ескі жарияланымды толық ауыстырамыз — жартылай қалып қоймауы үшін.
+      const { error: delErr } = await supabase
+        .from("published_results")
+        .delete()
+        .eq("test_session_id", selectedId);
+      if (delErr) throw delErr;
+
+      for (let i = 0; i < rows.length; i += 300) {
+        const { error: insErr } = await supabase
+          .from("published_results")
+          .insert(rows.slice(i, i + 300));
+        if (insErr) throw insErr;
+      }
+
+      const now = new Date().toISOString();
+      await supabase
+        .from("test_sessions")
+        .update({ results_published_at: now, has_results: true })
+        .eq("id", selectedId);
+      setPublishedAt(now);
+
+      setMessage(`Жарияланды: ${rows.length} оқушы. Ата-аналар нәтижені көре алады.`);
+    } catch (err: any) {
+      console.error(err);
+      setError("Қате: " + (err?.message ?? "белгісіз"));
+    } finally {
+      setBusy("");
+    }
+  }
+
   /** «Сұрақ бойынша» парағы: кім не белгіледі және дұрыс па. */
   function buildPerQuestion(
     sheets: Sheet[],
@@ -846,6 +1029,54 @@ export default function ScoringPage() {
             >
               {busy === "compute" ? "Есептелуде..." : "Нәтижелерді есептеу"}
             </button>
+          </section>
+
+          {/* 5. Жариялау */}
+          <section className="mt-4 rounded-2xl border border-parent/30 bg-parent-soft/40 p-5">
+            <h2 className="font-display text-lg font-bold text-ink">5-қадам. Жариялау</h2>
+            <p className="mt-1 text-sm text-ink/60">
+              Есептелген нәтижені ата-аналарға ашады: балдар, орын және тақырыптар бойынша талдау.
+              Осы түймені баспайынша ата-ана ештеңе көрмейді.
+            </p>
+            {publishedAt && (
+              <p className="mt-2 font-mono text-xs text-ink/50">
+                Соңғы жарияланым:{" "}
+                {new Date(publishedAt).toLocaleString("ru-RU", { timeZone: "Asia/Almaty" })}
+              </p>
+            )}
+
+            {confirmPublish ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3">
+                <span className="text-sm text-ink/70">
+                  {publishedAt
+                    ? "Ескі жарияланым толық ауыстырылады. Жариялау керек пе?"
+                    : "Нәтижелерді ата-аналарға ашамыз ба?"}
+                </span>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    onClick={() => setConfirmPublish(false)}
+                    className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-xs font-semibold text-ink/60"
+                  >
+                    Болдырмау
+                  </button>
+                  <button
+                    onClick={handlePublish}
+                    disabled={busy !== ""}
+                    className="focus-ring rounded-full bg-parent px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Иә, жариялау
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmPublish(true)}
+                disabled={busy !== ""}
+                className="focus-ring mt-3 rounded-full bg-parent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {busy === "publish" ? "Жариялануда..." : "Нәтижелерді жариялау"}
+              </button>
+            )}
           </section>
 
           {message && <p className="mt-4 text-sm text-parent">{message}</p>}

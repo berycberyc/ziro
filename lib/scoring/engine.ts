@@ -1,5 +1,6 @@
 import type { SubjectKey } from "@/lib/questions/subjects";
 import {
+  RFMSH_BANDS,
   NIS_SECTIONS,
   NIS_TIEBREAK_ORDER,
   BIL_POINTS,
@@ -372,6 +373,88 @@ export function scoreRfmsh(
     r.rank = i + 1;
   });
   return results;
+}
+
+export type TopicRow = {
+  subject: SubjectKey;
+  topic: string;
+  correct: number;
+  total: number;
+};
+
+/**
+ * Тақырып бойынша талдау — ата-ана үшін ең пайдалы бөлік.
+ * Ұпай «қай жердесің» дегенді айтады, тақырыптар «нені істеу керек» дегенді.
+ *
+ * Дұрыс жауап кілті көрсетілмейді: тек тақырып және дұрыс/барлығы.
+ */
+export function topicBreakdown(
+  sheets: Sheet[],
+  key: AnswerKeyItem[],
+  topicOf: Map<string, { subject: SubjectKey; topic: string }>
+): Map<string, TopicRow[]> {
+  const lookup = keyLookup(key);
+  const byStudent = new Map<string, Map<string, TopicRow>>();
+
+  sheets.forEach((sheet) => {
+    const perTopic = byStudent.get(sheet.zipgrade_id) ?? new Map<string, TopicRow>();
+
+    key
+      .filter((k) => k.subject === sheet.subject && k.variant_number === sheet.variant_number)
+      .forEach((k) => {
+        const info = topicOf.get(`${k.subject}|${k.variant_number}|${k.question_number}`);
+        if (!info) return; // тақырыбы жоқ сұрақ талдауға кірмейді
+
+        const id = `${info.subject}|${info.topic}`;
+        const row =
+          perTopic.get(id) ?? { subject: info.subject, topic: info.topic, correct: 0, total: 0 };
+        row.total++;
+        if (judge(sheet.answers[k.question_number], lookup(sheet.subject, sheet.variant_number, k.question_number)) === "correct") {
+          row.correct++;
+        }
+        perTopic.set(id, row);
+      });
+
+    byStudent.set(sheet.zipgrade_id, perTopic);
+  });
+
+  const out = new Map<string, TopicRow[]>();
+  byStudent.forEach((perTopic, id) => {
+    // Әлсіз тақырып жоғарыда тұрсын — ата-ана бірінші соны көреді.
+    const rows = [...perTopic.values()].sort(
+      (a, b) => a.correct / Math.max(a.total, 1) - b.correct / Math.max(b.total, 1)
+    );
+    out.set(id, rows);
+  });
+  return out;
+}
+
+/** РФМШ ондықтары: 1–10, 11–20, 21–30 бойынша дұрыс жауап саны. */
+export function rfmshBands(
+  sheet: Sheet,
+  key: AnswerKeyItem[]
+): { from: number; to: number; correct: number }[] {
+  const lookup = keyLookup(key);
+  return RFMSH_BANDS.map((band) => {
+    let correct = 0;
+    key
+      .filter(
+        (k) =>
+          k.subject === "rfmsh" &&
+          k.variant_number === sheet.variant_number &&
+          k.question_number >= band.from &&
+          k.question_number <= band.to
+      )
+      .forEach((k) => {
+        if (
+          judge(sheet.answers[k.question_number], lookup("rfmsh", sheet.variant_number, k.question_number)) ===
+          "correct"
+        ) {
+          correct++;
+        }
+      });
+    return { from: band.from, to: band.to, correct };
+  });
 }
 
 export { RFMSH_MAX };
