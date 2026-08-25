@@ -30,7 +30,15 @@ type QuestionPublic = {
 
 type PassageRow = { id: string; passage_text_kk: string; passage_text_ru: string };
 
-type Phase = "loading" | "error" | "consent" | "ready" | "question" | "finished";
+type Phase =
+  | "loading"
+  | "error"
+  | "waiting"       // тест әлі басталған жоқ
+  | "entry_closed"  // кіру уақыты өтіп кеткен
+  | "consent"
+  | "ready"         // блокты бастау / үзіліс
+  | "question"
+  | "finished";
 
 type SaveState = "idle" | "saving" | "saved" | "retrying";
 
@@ -58,6 +66,13 @@ export default function TestTakingPage() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  // Кесте: тест басталатын сәт, кіру жабылатын сәт, жеке шекті уақыт.
+  const [startsAt, setStartsAt] = useState<number | null>(null);
+  const [entryClosesAt, setEntryClosesAt] = useState<number | null>(null);
+  const [deadlineAt, setDeadlineAt] = useState<number | null>(null);
+  const [breakEndsAt, setBreakEndsAt] = useState<number | null>(null);
+  const [untilStart, setUntilStart] = useState<number | null>(null);
+  const [breakLeft, setBreakLeft] = useState<number | null>(null);
   const [consentChecked, setConsentChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -107,6 +122,25 @@ export default function TestTakingPage() {
         if (!error) {
           ok = true;
           break;
+        }
+        // Сервер уақыт бітті деп қайтарса — қайталаудың мағынасы жоқ.
+        const msg = String(error.message ?? "");
+        if (
+          msg.includes("deadline_passed") ||
+          msg.includes("block_time_over") ||
+          msg.includes("attempt_closed") ||
+          msg.includes("wrong_block")
+        ) {
+          queueRef.current = [];
+          workingRef.current = false;
+          setSaveState("idle");
+          setErrorMsg(
+            msg.includes("deadline_passed")
+              ? "Тестке берілген жалпы уақыт аяқталды. Жауаптарыңыз сақталды."
+              : "Бұл блоктың уақыты аяқталды. Жауаптарыңыз сақталды."
+          );
+          setPhase("finished");
+          return;
         }
         setSaveState("retrying");
         await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
@@ -213,6 +247,25 @@ export default function TestTakingPage() {
       const result = data as any;
       noteServerTime(result.server_now);
 
+      const toMs = (v: string | null | undefined) =>
+        v ? new Date(v).getTime() + clockOffsetRef.current : null;
+
+      setStartsAt(toMs(result.starts_at));
+      setEntryClosesAt(toMs(result.entry_closes_at));
+
+      // Тест әлі басталған жоқ — бір ғана хабарлама, 10 минут қалғанда
+      // сол беттің өзі кері санаққа айналады.
+      if (result.phase === "waiting") {
+        setPhase("waiting");
+        return;
+      }
+
+      // Кіру терезесі жабылған (басталғаннан кейін 30 минут).
+      if (result.phase === "entry_closed") {
+        setPhase("entry_closed");
+        return;
+      }
+
       if (!result.session_id) {
         setErrorMsg("Сессия деректері табылмады. Ұйымдастырушыға хабарласыңыз.");
         setPhase("error");
@@ -228,8 +281,10 @@ export default function TestTakingPage() {
       setBlocks(blockList);
       setSessionId(result.session_id);
       setVariantNumber(Number(result.variant_number) || 1);
+      setDeadlineAt(toMs(result.deadline_at));
+      setBreakEndsAt(toMs(result.break_ends_at));
 
-      if (result.status === "submitted") {
+      if (result.phase === "finished" || result.status === "submitted") {
         setPhase("finished");
         return;
       }
@@ -295,6 +350,35 @@ export default function TestTakingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registrationId]);
 
+  // Тест басталуын күту: кері санақ және басталған сәтте автоматты кіру.
+  useEffect(() => {
+    if (phase !== "waiting" || startsAt === null) return;
+    const tick = () => {
+      const left = Math.round((startsAt - Date.now()) / 1000);
+      setUntilStart(left);
+      if (left <= 0) {
+        // Уақыт келді — бетті қайта сұратамыз, экран өзі ашылады.
+        window.location.reload();
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [phase, startsAt]);
+
+  // Үзіліс: 5 минут кері санақ, нөлге жеткенде келесі блок өзі басталады.
+  useEffect(() => {
+    if (phase !== "ready" || breakEndsAt === null) return;
+    const tick = () => {
+      const left = Math.round((breakEndsAt - Date.now()) / 1000);
+      setBreakLeft(left);
+      if (left <= 0) startSubjectRef.current();
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [phase, breakEndsAt]);
+
   // Қалпына келтіргеннен кейін бірінші бос сұраққа тұрамыз.
   const positionedRef = useRef(false);
   useEffect(() => {
@@ -309,6 +393,7 @@ export default function TestTakingPage() {
   // Таймер
   // ------------------------------------------------------------------
   const finishBlockRef = useRef<() => void>(() => {});
+  const startSubjectRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (phase !== "question" || deadlineRef.current === null) return;
@@ -353,6 +438,11 @@ export default function TestTakingPage() {
 
       const res = data as any;
       noteServerTime(res.server_now);
+      setBreakEndsAt(null);
+      setBreakLeft(null);
+      if (res.deadline_at) {
+        setDeadlineAt(new Date(res.deadline_at).getTime() + clockOffsetRef.current);
+      }
       deadlineRef.current = computeDeadline(res.subject_started_at, currentSubject);
       setSecondsLeft(
         deadlineRef.current ? Math.round((deadlineRef.current - Date.now()) / 1000) : 0
@@ -378,6 +468,7 @@ export default function TestTakingPage() {
 
       const { data } = await supabase.rpc("advance_test_block", {
         p_registration_id: registrationId,
+        p_reason: (secondsLeft ?? 1) <= 0 ? "timeout" : "finished",
       });
       const res = data as any;
       noteServerTime(res?.server_now);
@@ -389,6 +480,9 @@ export default function TestTakingPage() {
       }
 
       setSubjectIndex(res?.current_subject_index ?? subjectIndex + 1);
+      setBreakEndsAt(
+        res?.break_ends_at ? new Date(res.break_ends_at).getTime() + clockOffsetRef.current : null
+      );
       setAnswers({});
       setQuestions([]);
       setPassages({});
@@ -404,11 +498,15 @@ export default function TestTakingPage() {
     } finally {
       setBusy(false);
     }
-  }, [busy, flushQueue, registrationId, subjectIndex]);
+  }, [busy, flushQueue, registrationId, subjectIndex, secondsLeft]);
 
   useEffect(() => {
     finishBlockRef.current = finishBlock;
-  }, [finishBlock]);
+  });
+
+  useEffect(() => {
+    startSubjectRef.current = handleStartSubject;
+  });
 
   // ------------------------------------------------------------------
   // Жауап беру
@@ -464,6 +562,65 @@ export default function TestTakingPage() {
   if (phase === "error")
     return <main className="p-10 text-center text-red-600">{errorMsg}</main>;
 
+  if (phase === "waiting") {
+    const startText = startsAt
+      ? new Date(startsAt - clockOffsetRef.current).toLocaleString("ru-RU", {
+          day: "numeric",
+          month: "long",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Asia/Almaty",
+        })
+      : "";
+    // 10 минут қалғанда осы беттің өзі кері санаққа айналады.
+    const showCountdown = untilStart !== null && untilStart <= 10 * 60;
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
+        <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
+          <h1 className="font-display text-xl font-bold text-ink">Тест әлі басталған жоқ</h1>
+          <p className="mt-3 text-sm text-ink/70">
+            Тест <b>{startText}</b> (Астана уақыты) басталады.
+          </p>
+
+          {showCountdown ? (
+            <>
+              <p className="mt-6 font-mono text-5xl font-bold tabular-nums text-teacher">
+                {formatTime(untilStart ?? 0)}
+              </p>
+              <p className="mt-2 text-xs text-ink/50">Тест өзі ашылады, бетті жаңартудың қажеті жоқ.</p>
+            </>
+          ) : (
+            <p className="mt-4 text-sm text-ink/60">
+              Басталуға 10 минут қалғанда осы бетте кері санақ шығады. Осы бетті ашық қалдыруға
+              болады.
+            </p>
+          )}
+
+          <p className="mt-6 text-xs leading-relaxed text-ink/50">
+            Кіру тест басталғаннан кейін 30 минут бойы ашық. Одан кейін кіру мүмкін емес.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "entry_closed") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
+        <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
+          <h1 className="font-display text-xl font-bold text-clay">Кіру жабылды</h1>
+          <p className="mt-3 text-sm text-ink/70">
+            Тестке кіру басталғаннан кейін 30 минут бойы ашық болды, ол уақыт өтіп кетті.
+          </p>
+          <p className="mt-3 text-xs text-ink/50">
+            Бұл ереже барлық қатысушыға бірдей қолданылады.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "consent") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
@@ -497,7 +654,7 @@ export default function TestTakingPage() {
   }
 
   if (phase === "ready") {
-    const isBreak = subjectIndex > 0;
+    const isBreak = subjectIndex > 0 && breakEndsAt !== null;
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
@@ -507,8 +664,22 @@ export default function TestTakingPage() {
           </h1>
           <p className="mt-2 text-sm text-ink/60">
             Уақыт: {currentSubject && SUBJECT_MINUTES[currentSubject]} минут.
-            {isBreak && " Дайын болғанда бастаңыз — үзіліс уақыты тест уақытынан алынбайды."}
           </p>
+
+          {isBreak && (
+            <>
+              <p className="mt-5 text-xs text-ink/50">
+                {currentSubject && SUBJECT_LABELS[currentSubject]} пәніне дейін:
+              </p>
+              <p className="mt-1 font-mono text-4xl font-bold tabular-nums text-teacher">
+                {formatTime(breakLeft ?? 0)}
+              </p>
+              <p className="mt-2 text-xs text-ink/50">
+                Дайын болсаңыз — қазір бастаңыз. Баспасаңыз, уақыт біткенде блок өзі басталады.
+              </p>
+            </>
+          )}
+
           <p className="mt-3 text-xs text-ink/40">
             Блок {subjectIndex + 1} / {blocks.length}
           </p>
@@ -517,7 +688,7 @@ export default function TestTakingPage() {
             disabled={busy}
             className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {busy ? "Жүктелуде..." : isBreak ? "Келесі пәнді бастау" : "Бастау"}
+            {busy ? "Жүктелуде..." : isBreak ? "Қазір бастау" : "Бастау"}
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { fetchAll } from "@/lib/fetchAll";
+import OnlineMonitor from "@/components/OnlineMonitor";
 
 type TrialTest = {
   id: string;
@@ -41,6 +42,7 @@ export default function MonitoringPage() {
   const [selected, setSelected] = useState<TrialTest | null>(null);
   const [regs, setRegs] = useState<RegRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<"offline" | "online">("offline");
 
   useEffect(() => {
     supabase
@@ -104,16 +106,39 @@ export default function MonitoringPage() {
         ))}
       </select>
 
-      {!selectedId && <p className="mt-6 text-sm text-ink/50">Алдымен байқау тест таңдаңыз.</p>}
-      {selectedId && loading && <p className="mt-6 text-sm text-ink/50">Жүктелуде...</p>}
+      {selectedId && (
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => setTab("offline")}
+            className={`focus-ring rounded-full px-5 py-2 text-sm font-semibold ${
+              tab === "offline" ? "bg-admin text-white" : "bg-admin-soft text-admin"
+            }`}
+          >
+            Офлайн
+          </button>
+          <button
+            onClick={() => setTab("online")}
+            className={`focus-ring rounded-full px-5 py-2 text-sm font-semibold ${
+              tab === "online" ? "bg-admin text-white" : "bg-admin-soft text-admin"
+            }`}
+          >
+            Онлайн тест
+          </button>
+        </div>
+      )}
 
-      {selectedId && !loading && stage === "not_open" && (
+      {selectedId && tab === "online" && <OnlineMonitor sessionId={selectedId} />}
+
+      {!selectedId && <p className="mt-6 text-sm text-ink/50">Алдымен байқау тест таңдаңыз.</p>}
+      {selectedId && tab === "offline" && loading && <p className="mt-6 text-sm text-ink/50">Жүктелуде...</p>}
+
+      {selectedId && tab === "offline" && !loading && stage === "not_open" && (
         <p className="mt-6 rounded-xl bg-ink/5 px-4 py-3 text-sm text-ink/50">
           Бұл тест үшін тіркеу әлі басталмаған.
         </p>
       )}
 
-      {selectedId && !loading && stage === "registration" && (
+      {selectedId && tab === "offline" && !loading && stage === "registration" && (
         <div className="mt-6">
           <p className="mb-3 text-sm font-semibold text-ink/70">
             Тіркелгендер ({regs.length})
@@ -133,7 +158,7 @@ export default function MonitoringPage() {
         </div>
       )}
 
-      {selectedId && !loading && stage === "checking" && (
+      {selectedId && tab === "offline" && !loading && stage === "checking" && (
         <div className="mt-6">
           {(() => {
             const paid = regs.filter((r) => r.payment_status === "paid");
@@ -170,7 +195,7 @@ export default function MonitoringPage() {
         </div>
       )}
 
-      {selectedId && !loading && stage === "after" && (
+      {selectedId && tab === "offline" && !loading && stage === "after" && (
         <div className="mt-6">
           <p className="mb-3 text-sm font-semibold text-ink/70">
             Келді/келмеді тізімі (ақшаны қайтару даулары үшін)

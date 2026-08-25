@@ -30,6 +30,14 @@ type SessionInfo = {
   has_results: boolean;
 };
 
+/** "10:00" + 30 → "10:30". Тек көрсету үшін. */
+function addMinutes(hhmm: string, minutes: number) {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+  const total = (h * 60 + m + minutes) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 export default function AdminSessionDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -94,6 +102,12 @@ export default function AdminSessionDetailPage() {
         title_ru: form.title_ru,
         session_date: form.session_date,
         start_time: form.start_time || null,
+        // Онлайн тест кестесі осы екеуінен шығады. Астана уақыты (+05:00)
+        // анық жазылады — сервер қай белдеуде тұрса да, сәт дәл сақталады.
+        online_starts_at:
+          form.session_date && form.start_time
+            ? `${form.session_date}T${form.start_time}:00+05:00`
+            : null,
         address: form.address || null,
         price: Number(form.price),
         registration_opens_at: form.registration_opens_at || null,
@@ -189,12 +203,19 @@ export default function AdminSessionDetailPage() {
             value={form.session_date ?? ""}
             onChange={(e) => setForm({ ...form, session_date: e.target.value })}
           />
-          <input
-            type="time"
-            className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm"
-            value={form.start_time ?? ""}
-            onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-          />
+          <div>
+            <input
+              type="time"
+              className="focus-ring w-full rounded-xl border border-ink/15 px-3 py-2 text-sm"
+              value={form.start_time ?? ""}
+              onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+            />
+            {form.start_time && (
+              <p className="mt-1 text-xs text-ink/50">
+                Онлайн: кіру {form.start_time} — {addMinutes(form.start_time, 30)} (Астана уақыты)
+              </p>
+            )}
+          </div>
           <input
             className="focus-ring rounded-xl border border-ink/15 px-3 py-2 text-sm sm:col-span-2"
             placeholder="Мекенжайы"
