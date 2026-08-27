@@ -129,6 +129,14 @@ export default function QuestionPreviewPage() {
                         className={`text-sm ${c.correct ? "font-semibold text-parent" : "text-ink/70"}`}
                       >
                         {LETTERS[i]}) <MathText text={c.text_kk} /> {c.correct && "✓"}
+                        {/* Орысша нұсқасы бөлек өріс — бұрын мұнда тек
+                            қазақшасы көрсетіліп, аудармасын тексеру мүмкін
+                            болмайтын. */}
+                        {c.text_ru && c.text_ru !== c.text_kk && (
+                          <span className="block pl-5 text-xs font-normal text-ink/40">
+                            <MathText text={c.text_ru} />
+                          </span>
+                        )}
                       </p>
                     ))}
                   </div>
@@ -146,10 +154,20 @@ export default function QuestionPreviewPage() {
                       <div className="rounded-lg border border-ink/10 p-2">
                         <p className="text-xs text-ink/40">А бағаны</p>
                         <MathText text={q.column_a_kk ?? ""} />
+                        {q.column_a_ru && q.column_a_ru !== q.column_a_kk && (
+                          <span className="block text-xs text-ink/40">
+                            <MathText text={q.column_a_ru} />
+                          </span>
+                        )}
                       </div>
                       <div className="rounded-lg border border-ink/10 p-2">
                         <p className="text-xs text-ink/40">В бағаны</p>
                         <MathText text={q.column_b_kk ?? ""} />
+                        {q.column_b_ru && q.column_b_ru !== q.column_b_kk && (
+                          <span className="block text-xs text-ink/40">
+                            <MathText text={q.column_b_ru} />
+                          </span>
+                        )}
                       </div>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-parent">
