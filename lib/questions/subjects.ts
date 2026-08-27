@@ -46,13 +46,14 @@ export const QUANTITY_CHOICE_LABELS: Record<"A" | "B" | "C" | "D", { kk: string;
 // БИЛ-математика style: plain ABCD question list). Сандық has its own
 // quantity-comparison form; Тілдер/БИЛ-оқылым use the passage-based form;
 // РФМШ has no answer choices at all.
-export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math", "zharatylystanu"];
+export const SIMPLE_ABCD_SUBJECTS: SubjectKey[] = ["math"];
 export const QUANTITY_SUBJECTS: SubjectKey[] = ["sandyq"];
-export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder", "bil"];
+export const PASSAGE_SUBJECTS: SubjectKey[] = ["tilder", "bil", "zharatylystanu"];
 
-// БИЛ-де 1–50 сұрақтың мәтіні жоқ, тек 51–60 мәтінмен. Сондықтан енгізу
-// формасында «мәтінсіз сұрақтар» тобы болуы керек.
-export const PARTIAL_PASSAGE_SUBJECTS: SubjectKey[] = ["bil"];
+// БИЛ-де 1–50 сұрақтың мәтіні жоқ, тек 51–60 мәтінмен. Жаратылыстануда да
+// бір бөлігі мәтінмен, бір бөлігі мәтінсіз. Сондықтан енгізу формасында
+// «мәтінсіз сұрақтар» тобы болуы керек.
+export const PARTIAL_PASSAGE_SUBJECTS: SubjectKey[] = ["bil", "zharatylystanu"];
 
 // Тілдер жалғыз тілде жазылады (қазақ бөлімі қазақша, орыс бөлімі орысша,
 // ағылшын бөлімі ағылшынша) — аударманың мағынасы жоқ. БИЛ-оқылым екі тілде.
