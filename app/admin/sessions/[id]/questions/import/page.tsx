@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { fetchAll } from "@/lib/fetchAll";
-import { docxToLines } from "@/lib/questions/docxReader";
+import { docxToContent, type DocxImage } from "@/lib/questions/docxReader";
 import {
   parseQuestionsDocument,
   type ParseResult,
@@ -42,6 +42,7 @@ export default function ImportQuestionsPage() {
   const [topicIds, setTopicIds] = useState<Map<string, string>>(new Map());
   const [missingTopics, setMissingTopics] = useState<string[]>([]);
   const [existing, setExisting] = useState<number | null>(null);
+  const [images, setImages] = useState<Map<number, DocxImage>>(new Map());
 
   // Пән бойынша бар тақырыптар — файлдағы атаулар солармен салыстырылады.
   useEffect(() => {
@@ -66,7 +67,8 @@ export default function ImportQuestionsPage() {
     setFileName(file.name);
 
     try {
-      const lines = await docxToLines(file);
+      const { lines, images: found } = await docxToContent(file);
+      setImages(found);
       const result = parseQuestionsDocument(lines, subject);
       setParsed(result);
 
@@ -137,6 +139,21 @@ export default function ImportQuestionsPage() {
         (inserted ?? []).forEach((p: any) => passageIds.set(p.order_number, p.id));
       }
 
+      // Суреттерді қоймаға жүктеп, әр сұраққа сілтеме дайындаймыз.
+      const imageUrls = new Map<number, string>();
+      for (const q of parsed.questions) {
+        if (q.image_index === null) continue;
+        const img = images.get(q.image_index);
+        if (!img) continue;
+        const path = `${sessionId}/${subject}/${variant}/${q.question_number}-${Date.now()}.${img.ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("question-images")
+          .upload(path, img.blob, { contentType: img.blob.type });
+        if (upErr) throw upErr;
+        const { data } = supabase.storage.from("question-images").getPublicUrl(path);
+        imageUrls.set(q.image_index, data.publicUrl);
+      }
+
       const isQuantity = QUANTITY_SUBJECTS.includes(subject);
       const isNumeric = NUMERIC_SUBJECTS.includes(subject);
 
@@ -149,7 +166,7 @@ export default function ImportQuestionsPage() {
         passage_id: q.passage_index !== null ? passageIds.get(q.passage_index) ?? null : null,
         text_kk: q.text_kk,
         text_ru: q.text_ru || q.text_kk,
-        image_url: null,
+        image_url: q.image_index !== null ? imageUrls.get(q.image_index) ?? null : null,
         answer_format: isQuantity ? "quantity" : isNumeric ? "numeric" : "abcd",
         choices: isQuantity || isNumeric ? null : q.choices,
         correct_answer: isQuantity || isNumeric ? q.correct_answer : null,
@@ -232,6 +249,7 @@ export default function ImportQuestionsPage() {
                 <b className={parsed.variant ? "" : "text-red-600"}>{parsed.variant ?? "жоқ"}</b>
               </p>
               <p>Сұрақ саны: {parsed.questions.length}</p>
+              <p>Суреті бар сұрақ: {parsed.questions.filter((q) => q.image_index !== null).length}</p>
               {PASSAGE_SUBJECTS.includes(subject) && <p>Мәтін саны: {parsed.passages.length}</p>}
             </div>
 
@@ -315,6 +333,13 @@ export default function ImportQuestionsPage() {
                       <p className="mt-1 whitespace-pre-line text-sm text-ink">
                         <MathText text={q.text_kk} />
                       </p>
+                    )}
+                    {q.image_index !== null && images.get(q.image_index) && (
+                      <img
+                        src={URL.createObjectURL(images.get(q.image_index)!.blob)}
+                        alt=""
+                        className="mt-2 max-h-40 rounded-lg border border-ink/10"
+                      />
                     )}
                     {q.choices.length > 0 && (
                       <ul className="mt-2 flex flex-col gap-1 text-sm">

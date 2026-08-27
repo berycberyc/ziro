@@ -33,6 +33,8 @@ export type ParsedChoice = { text_kk: string; text_ru: string; correct: boolean 
 export type ParsedQuestion = {
   question_number: number;
   topic: string | null;
+  /** Word-тағы суреттің нөмірі (docxToContent берген). Бір сұраққа бір сурет. */
+  image_index: number | null;
   text_kk: string;
   text_ru: string;
   choices: ParsedChoice[];
@@ -125,6 +127,24 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
     const line = raw.trim();
     if (!line) continue;
 
+    // Сурет белгісі: "[[image:3]]" — Word-тағы орны бойынша қойылған.
+    const img = line.match(/^\[\[image:(\d+)\]\]$/);
+    if (img) {
+      const idx = Number(img[1]);
+      if (current) {
+        if (current.image_index === null) {
+          current.image_index = idx;
+        } else {
+          warnings.push(
+            `${current.question_number}-сұрақта бірнеше сурет бар — біріншісі ғана алынды.`
+          );
+        }
+      } else if (collectingPassage) {
+        warnings.push(`Мәтін ішіндегі сурет еленбеді (суреттер тек сұраққа тіркеледі).`);
+      }
+      continue;
+    }
+
     const m = line.match(TAG);
     if (!m) {
       addText(line);
@@ -163,6 +183,7 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
       current = {
         question_number: qn,
         topic: null,
+        image_index: null,
         text_kk: "",
         text_ru: "",
         choices: [],

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +24,7 @@ type QuestionRow = {
   topic_id: string | null;
   text_kk: string;
   text_ru: string;
+  image_url: string | null;
   choices: Choice[];
 };
 
@@ -56,6 +57,11 @@ export default function PassageQuestionEntryPage() {
 
   // New-question draft form state
   const [draftOpen, setDraftOpen] = useState(false);
+  // Сұрақ көп болғанда форма тізімнің астында, экраннан тыс ашылады —
+  // «түйме жұмыс істемейді» деген әсер сол себепті. Соған айналдырамыз.
+  const draftRef = useRef<HTMLDivElement>(null);
+  const [draftImageUrl, setDraftImageUrl] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [draftTopic, setDraftTopic] = useState("");
   const [draftSame, setDraftSame] = useState(true);
   const [draftKk, setDraftKk] = useState("");
@@ -89,7 +95,7 @@ export default function PassageQuestionEntryPage() {
     async (passageId: string) => {
       let query = supabase
         .from("questions")
-        .select("id, question_number, topic_id, text_kk, text_ru, choices");
+        .select("id, question_number, topic_id, text_kk, text_ru, image_url, choices");
 
       if (passageId === NO_PASSAGE) {
         // Мәтінге байланбаған сұрақтар — пән мен нұсқа бойынша сүземіз.
@@ -210,6 +216,7 @@ export default function PassageQuestionEntryPage() {
   }
 
   function openNewQuestionDraft() {
+    setDraftImageUrl(null);
     setEditingQuestionId(null);
     setDraftTopic("");
     setDraftSame(true);
@@ -219,8 +226,25 @@ export default function PassageQuestionEntryPage() {
     setDraftOpen(true);
   }
 
+  async function handleDraftImageUpload(file: File) {
+    setUploadingImage(true);
+    setError("");
+    const ext = file.name.split(".").pop();
+    const path = `${sessionId}/${subject}/${variant}/${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("question-images").upload(path, file);
+    if (upErr) {
+      setError("Сурет жүктелмеді: " + upErr.message);
+      setUploadingImage(false);
+      return;
+    }
+    const { data } = supabase.storage.from("question-images").getPublicUrl(path);
+    setDraftImageUrl(data.publicUrl);
+    setUploadingImage(false);
+  }
+
   function openEditQuestionDraft(q: QuestionRow) {
     setEditingQuestionId(q.id);
+    setDraftImageUrl(q.image_url ?? null);
     setDraftTopic(q.topic_id ?? "");
     setDraftSame(q.text_kk === q.text_ru);
     setDraftKk(q.text_kk);
@@ -228,6 +252,12 @@ export default function PassageQuestionEntryPage() {
     setDraftChoices(q.choices);
     setDraftOpen(true);
   }
+
+  useEffect(() => {
+    if (draftOpen) {
+      draftRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [draftOpen, editingQuestionId]);
 
   function updateDraftChoice(index: number, field: "text_kk" | "text_ru", value: string) {
     setDraftChoices((prev) =>
@@ -299,6 +329,7 @@ export default function PassageQuestionEntryPage() {
         variant_number: variant,
         question_number: nextNumber,
         passage_id: activePassageId === NO_PASSAGE ? null : activePassageId,
+        image_url: draftImageUrl,
         topic_id: draftTopic,
         text_kk: draftKk,
         text_ru: finalRu,
@@ -434,7 +465,15 @@ export default function PassageQuestionEntryPage() {
           )}
 
           {draftOpen && (
-            <div className="rounded-2xl border border-ink/10 bg-white p-5">
+            <div
+              ref={draftRef}
+              className="rounded-2xl border-2 border-admin bg-white p-5 shadow-lg"
+            >
+              <p className="mb-3 font-display text-sm font-bold text-admin">
+                {editingQuestionId
+                  ? `${questions.find((q) => q.id === editingQuestionId)?.question_number ?? ""}-сұрақты өңдеу`
+                  : "Жаңа сұрақ"}
+              </p>
               <label className="text-xs font-semibold text-ink/50">Тема</label>
               <select
                 value={draftTopic}
@@ -448,6 +487,40 @@ export default function PassageQuestionEntryPage() {
                   </option>
                 ))}
               </select>
+
+              {/* Сурет — сұраққа бір-ақ сурет тіркеледі */}
+              <div className="mt-3">
+                <label className="text-xs font-semibold text-ink/50">Сурет (міндетті емес)</label>
+                <div className="mt-1 flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={uploadingImage}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) handleDraftImageUpload(f);
+                    }}
+                    className="text-sm"
+                  />
+                  {uploadingImage && <span className="text-xs text-ink/50">Жүктелуде...</span>}
+                </div>
+                {draftImageUrl && (
+                  <div className="mt-2 flex items-center gap-3">
+                    <img
+                      src={draftImageUrl}
+                      alt=""
+                      className="max-h-32 rounded-lg border border-ink/10"
+                    />
+                    <button
+                      onClick={() => setDraftImageUrl(null)}
+                      className="focus-ring text-xs text-red-500 hover:underline"
+                    >
+                      Өшіру
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {!monolingual && (
                 <label className="mt-3 flex items-center gap-2 text-sm text-ink/70">

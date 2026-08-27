@@ -24,7 +24,8 @@ async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(buf);
 }
 
-export async function readDocumentXml(file: File): Promise<string> {
+/** docx ішіндегі барлық файлды атауы бойынша шығарып алады. */
+async function readZip(file: File): Promise<Map<string, Uint8Array>> {
   const data = new Uint8Array(await file.arrayBuffer());
   const view = new DataView(data.buffer);
 
@@ -40,6 +41,7 @@ export async function readDocumentXml(file: File): Promise<string> {
 
   const count = view.getUint16(eocd + 10, true);
   let ptr = view.getUint32(eocd + 16, true);
+  const out = new Map<string, Uint8Array>();
 
   for (let i = 0; i < count; i++) {
     if (view.getUint32(ptr, true) !== 0x02014b50) break;
@@ -51,18 +53,18 @@ export async function readDocumentXml(file: File): Promise<string> {
     const localOffset = view.getUint32(ptr + 42, true);
     const name = new TextDecoder().decode(data.subarray(ptr + 46, ptr + 46 + nameLen));
 
-    if (name === "word/document.xml") {
+    // Бізге керегі: құжаттың өзі, суреттер және олардың байланыстары.
+    if (name === "word/document.xml" || name === "word/_rels/document.xml.rels" || name.startsWith("word/media/")) {
       const lNameLen = view.getUint16(localOffset + 26, true);
       const lExtraLen = view.getUint16(localOffset + 28, true);
       const start = localOffset + 30 + lNameLen + lExtraLen;
       const raw = data.subarray(start, start + compSize);
-      const out = method === 0 ? raw : await inflateRaw(raw);
-      return new TextDecoder("utf-8").decode(out);
+      out.set(name, method === 0 ? raw : await inflateRaw(raw));
     }
 
     ptr += 46 + nameLen + extraLen + commentLen;
   }
-  throw new Error("Файл ішінен word/document.xml табылмады.");
+  return out;
 }
 
 // ---------------------------------------------------------------
@@ -162,6 +164,27 @@ function conv(el: Element): string {
 // 3. Абзацтар -> жолдар
 // ---------------------------------------------------------------
 
+/** Абзацтағы суреттің rId-ін табады (болса). */
+function findImageRel(p: Element): string | null {
+  const blips = p.getElementsByTagNameNS(
+    "http://schemas.openxmlformats.org/drawingml/2006/main",
+    "blip"
+  );
+  for (const b of Array.from(blips)) {
+    const id =
+      b.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "embed") ??
+      b.getAttribute("r:embed");
+    if (id) return id;
+  }
+  // Ескі формат (Word 2003 сияқты): v:imagedata
+  const vml = p.getElementsByTagName("v:imagedata");
+  for (const v of Array.from(vml)) {
+    const id = v.getAttribute("r:id");
+    if (id) return id;
+  }
+  return null;
+}
+
 function paragraphText(p: Element): string {
   const out: string[] = [];
 
@@ -189,21 +212,85 @@ function paragraphText(p: Element): string {
   return out.join("").trim();
 }
 
-/** Word файлын мағыналы жолдар тізіміне айналдырады. */
-export async function docxToLines(file: File): Promise<string[]> {
-  const xml = await readDocumentXml(file);
+export type DocxImage = { blob: Blob; ext: string };
+
+export type DocxContent = {
+  /** Мәтін жолдары. Сурет тұрған жерде "[[image:N]]" деген белгі тұрады. */
+  lines: string[];
+  /** Белгідегі N -> сурет. */
+  images: Map<number, DocxImage>;
+};
+
+const MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  webp: "image/webp",
+  emf: "image/emf",
+  wmf: "image/wmf",
+};
+
+/**
+ * Word файлын мағыналы жолдарға айналдырады.
+ * Суреттер бөлек шығарылады, ал мәтінде олардың орны белгіленеді —
+ * сол арқылы қай сурет қай сұраққа тиесілі екені анықталады.
+ */
+export async function docxToContent(file: File): Promise<DocxContent> {
+  const zip = await readZip(file);
+
+  const docBytes = zip.get("word/document.xml");
+  if (!docBytes) throw new Error("Файл ішінен word/document.xml табылмады.");
+  const xml = new TextDecoder("utf-8").decode(docBytes);
+
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("Файлды оқу мүмкін болмады.");
 
+  // rId -> word/media/... байланысы
+  const relMap = new Map<string, string>();
+  const relBytes = zip.get("word/_rels/document.xml.rels");
+  if (relBytes) {
+    const relDoc = new DOMParser().parseFromString(
+      new TextDecoder("utf-8").decode(relBytes),
+      "application/xml"
+    );
+    for (const r of Array.from(relDoc.getElementsByTagName("Relationship"))) {
+      const id = r.getAttribute("Id");
+      const target = r.getAttribute("Target");
+      if (id && target) relMap.set(id, target.replace(/^\/?word\//, "").replace(/^\.\.\//, ""));
+    }
+  }
+
   const lines: string[] = [];
-  // Кестелердегі абзацтар да кіреді — getElementsByTagNameNS бәрін алады.
+  const images = new Map<number, DocxImage>();
+  let imageCounter = 0;
+
   const paragraphs = doc.getElementsByTagNameNS(
     "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
     "p"
   );
+
   for (const p of Array.from(paragraphs)) {
     const text = paragraphText(p);
+    const rel = findImageRel(p);
+
+    if (rel) {
+      const target = relMap.get(rel);
+      const bytes = target ? zip.get("word/" + target) : undefined;
+      if (bytes) {
+        const ext = (target!.split(".").pop() ?? "png").toLowerCase();
+        imageCounter++;
+        images.set(imageCounter, {
+          blob: new Blob([bytes as BlobPart], { type: MIME[ext] ?? "image/png" }),
+          ext,
+        });
+        lines.push(`[[image:${imageCounter}]]`);
+      }
+    }
+
     if (text) lines.push(text);
   }
-  return lines;
+
+  return { lines, images };
 }
