@@ -30,6 +30,14 @@ type SessionInfo = {
   has_results: boolean;
 };
 
+/** "17:00" не "17:00:00" → "17:00:00". Бос болса — null. */
+function normalizeTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const [h, m] = value.split(":");
+  if (h === undefined || m === undefined) return null;
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}:00`;
+}
+
 /** "10:00" + 30 → "10:30". Тек көрсету үшін. */
 function addMinutes(hhmm: string, minutes: number) {
   const [h, m] = hhmm.split(":").map(Number);
@@ -95,25 +103,34 @@ export default function AdminSessionDetailPage() {
   }
 
   async function handleSaveEdit() {
-    await supabase
+    // Уақыт өрісі "17:00" болып та, "17:00:00" болып та келуі мүмкін —
+    // екеуін де HH:MM:SS түріне келтіреміз, әйтпесе timestamp бүлінеді.
+    const time = normalizeTime(form.start_time);
+
+    const { error } = await supabase
       .from("test_sessions")
       .update({
         title_kk: form.title_kk,
         title_ru: form.title_ru,
         session_date: form.session_date,
-        start_time: form.start_time || null,
+        start_time: time,
         // Онлайн тест кестесі осы екеуінен шығады. Астана уақыты (+05:00)
         // анық жазылады — сервер қай белдеуде тұрса да, сәт дәл сақталады.
         online_starts_at:
-          form.session_date && form.start_time
-            ? `${form.session_date}T${form.start_time}:00+05:00`
-            : null,
+          form.session_date && time ? `${form.session_date}T${time}+05:00` : null,
         address: form.address || null,
         price: Number(form.price),
         registration_opens_at: form.registration_opens_at || null,
         registration_closes_at: form.registration_closes_at || null,
       })
       .eq("id", sessionId);
+
+    if (error) {
+      // Бұрын қате үнсіз жұтылатын: сақталмағанын білу мүмкін емес еді.
+      alert("Сақталмады: " + error.message);
+      return;
+    }
+
     setEditing(false);
     load();
   }
@@ -212,7 +229,8 @@ export default function AdminSessionDetailPage() {
             />
             {form.start_time && (
               <p className="mt-1 text-xs text-ink/50">
-                Онлайн: кіру {form.start_time} — {addMinutes(form.start_time, 30)} (Астана уақыты)
+                Онлайн: кіру {form.start_time.slice(0, 5)} —{" "}
+                {addMinutes(form.start_time.slice(0, 5), 30)} (Астана уақыты)
               </p>
             )}
           </div>
