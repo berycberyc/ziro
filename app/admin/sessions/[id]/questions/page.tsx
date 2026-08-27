@@ -128,6 +128,12 @@ export default function SessionQuestionsSelectorPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <Link
+                    href={`/admin/sessions/${sessionId}/questions/import?subject=${subj}`}
+                    className="focus-ring rounded-full border border-teacher px-5 py-2 text-sm font-semibold text-teacher hover:bg-teacher-soft"
+                  >
+                    Word-тан
+                  </Link>
                   {current > 0 && (
                     <Link
                       href={`/admin/sessions/${sessionId}/questions/preview?variant=${variant}&subject=${subj}`}
