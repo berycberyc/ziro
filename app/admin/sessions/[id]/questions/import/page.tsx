@@ -19,7 +19,7 @@ import {
   type SubjectKey,
 } from "@/lib/questions/subjects";
 import MathText from "@/components/MathText";
-import { buildPrintDocx } from "@/lib/print/buildPrintDocx";
+import { buildCleanDocx } from "@/lib/print/buildCleanDocx";
 import { MONOLINGUAL_SUBJECTS } from "@/lib/questions/subjects";
 
 /**
@@ -38,6 +38,8 @@ export default function ImportQuestionsPage() {
 
   const [parsed, setParsed] = useState<ParseResult | null>(null);
   const [fileName, setFileName] = useState("");
+  // Тазалау сол файлдың өзінен жасалады, сондықтан оны ұстап тұрамыз.
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   // Қай әрекет жүріп жатқанын білдіреді: "" — бос, әйтпесе түйменің аты.
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -48,7 +50,7 @@ export default function ImportQuestionsPage() {
   const [images, setImages] = useState<Map<number, DocxImage>>(new Map());
   // Басып шығаруға дайын файлдар: осы пән мен нұсқа бойынша қай тілде
   // PDF жүктелген.
-  const [printVariant, setPrintVariant] = useState<number | null>(null);
+  const [printVariant, setPrintVariant] = useState<number>(1);
   const [printFiles, setPrintFiles] = useState<Record<string, { url: string; pages: number | null }>>({});
   const [sessionTitle, setSessionTitle] = useState("");
   const mono = MONOLINGUAL_SUBJECTS.includes(subject);
@@ -81,6 +83,12 @@ export default function ImportQuestionsPage() {
     [sessionId, subject]
   );
 
+  // Экранға кіргенде бірінші нұсқаның PDF күйін көрсетеміз.
+  useEffect(() => {
+    loadPrintFiles(printVariant);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadPrintFiles]);
+
   useEffect(() => {
     supabase
       .from("topics")
@@ -101,6 +109,7 @@ export default function ImportQuestionsPage() {
     setMissingTopics([]);
     setExisting(null);
     setFileName(file.name);
+    setSourceFile(file);
 
     try {
       const { lines, images: found } = await docxToContent(file);
@@ -221,9 +230,19 @@ export default function ImportQuestionsPage() {
         `${SUBJECT_LABELS[subject]}, ${variant}-нұсқа: ${rows.length} сұрақ жүктелді.` +
           (parsed.passages.length > 0 ? ` Мәтін саны: ${parsed.passages.length}.` : "")
       );
-      // Осы нұсқа бойынша баспаға дайын файлдар блогын ашамыз.
       setPrintVariant(variant);
       await loadPrintFiles(variant);
+
+      // Бірден таза көшірмелерді береміз — екінші рет басудың қажеті жоқ.
+      if (sourceFile) {
+        try {
+          await makeCleanFiles(sourceFile, variant);
+        } catch (err) {
+          console.error("Clean docx failed:", err);
+          setError("Сұрақтар сақталды, бірақ таза Word жасалмады.");
+        }
+      }
+
       setParsed(null);
       setFileName("");
     } catch (err: any) {
@@ -234,60 +253,21 @@ export default function ImportQuestionsPage() {
     }
   }
 
-  /** Базадан осы пән мен нұсқаның сұрақтарын алып, таза Word жасау. */
-  async function handleDownloadClean(lang: "kk" | "ru") {
-    if (!printVariant) return;
-    setBusy("clean-" + lang);
-    setError("");
-    try {
-      const questions = await fetchAll<any>((from, to) =>
-        supabase
-          .from("questions")
-          .select(
-            "question_number, text_kk, text_ru, image_url, answer_format, choices, column_a_kk, column_a_ru, column_b_kk, column_b_ru, passage_id"
-          )
-          .eq("session_id", sessionId)
-          .eq("subject", subject)
-          .eq("variant_number", printVariant)
-          .order("question_number")
-          .range(from, to)
-      );
-
-      const passageRows = await fetchAll<any>((from, to) =>
-        supabase
-          .from("passages")
-          .select("id, passage_text_kk, passage_text_ru, order_number")
-          .eq("session_id", sessionId)
-          .eq("subject", subject)
-          .eq("variant_number", printVariant)
-          .order("order_number")
-          .range(from, to)
-      );
-
-      const blob = await buildPrintDocx({
-        sessionTitle,
-        subject,
-        variant: printVariant,
-        lang,
-        questions: questions as any,
-        passages: passageRows.map((p: any) => ({
-          id: p.id,
-          text_kk: p.passage_text_kk ?? "",
-          text_ru: p.passage_text_ru ?? "",
-          order_number: p.order_number,
-        })),
-      });
-
+  /**
+   * Жүктелген файлдың өзінен таза көшірмелер жасау.
+   * Формулалар Word-тың нағыз теңдеулері күйінде қалады — сондықтан
+   * құжатты нөлден құрастырмай, көшірмесін тазалаймыз.
+   */
+  async function makeCleanFiles(file: File, variant: number) {
+    for (const lang of langs) {
+      const blob = await buildCleanDocx(file, lang);
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${subject}-nuska${printVariant}-${lang}.docx`;
+      a.download = `${subject}-nuska${variant}-${lang}.docx`;
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch (err: any) {
-      console.error(err);
-      setError("Файл жасалмады: " + (err?.message ?? "белгісіз"));
-    } finally {
-      setBusy("");
+      // Браузер бірнеше файлды қатар жүктегенде біреуін тастап кетуі мүмкін.
+      await new Promise((r) => setTimeout(r, 400));
     }
   }
 
@@ -374,78 +354,84 @@ export default function ImportQuestionsPage() {
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       {message && <p className="mt-4 text-sm text-parent">{message}</p>}
 
-      {/* Басып шығаруға дайындау — сұрақтар базаға түскеннен кейін ашылады.
-          Барлығы бір экранда: жүктедім → таза Word алдым → түзеттім →
-          PDF-ті сол жерге қайта салдым. */}
-      {printVariant && (
-        <section className="mt-6 rounded-2xl border border-teacher/30 bg-teacher-soft/30 p-5">
-          <h2 className="font-display text-lg font-bold text-ink">
-            Басып шығару — {printVariant}-нұсқа
-          </h2>
-          <p className="mt-1 text-sm text-ink/60">
-            Таза Word файлын жүктеп алыңыз, беттердің бөлінуін өзіңізге ыңғайлы етіп
-            түзетіңіз, PDF ретінде сақтап, осында қайта салыңыз.
-            {mono && " Тілдер бір тілде — файл біреу."}
-          </p>
+      {/* Басып шығару файлдары — әрқашан көрінеді, Word жүктелмесе де.
+          Түзетілген PDF-ті кейін, басқа күні әкелуге болады. */}
+      <section className="mt-6 rounded-2xl border border-teacher/30 bg-teacher-soft/30 p-5">
+        <h2 className="font-display text-lg font-bold text-ink">Басып шығару файлдары</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          Word жүктегенде таза көшірмелер өздігінен жүктеліп алынады. Беттердің бөлінуін
+          түзетіп, PDF ретінде сақтап, осында қайта салыңыз.
+          {mono && " Тілдер бір тілде — файл біреу."}
+        </p>
 
-          <div className="mt-4 flex flex-col gap-3">
-            {langs.map((lang) => {
-              const ready = printFiles[lang];
-              return (
-                <div
-                  key={lang}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink/10 bg-white px-4 py-3"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-ink">
-                      {mono ? "Файл" : lang === "kk" ? "Қазақша" : "Орысша"}
-                    </p>
-                    <p className="font-mono text-xs text-ink/50">
-                      {ready ? "PDF дайын ✓" : "PDF жүктелмеген"}
-                    </p>
-                  </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[1, 2, 3, 4].map((v) => (
+            <button
+              key={v}
+              onClick={() => {
+                setPrintVariant(v);
+                loadPrintFiles(v);
+              }}
+              className={`focus-ring rounded-full px-4 py-1.5 text-sm font-semibold ${
+                printVariant === v ? "bg-admin text-white" : "bg-admin-soft text-admin"
+              }`}
+            >
+              Нұсқа {v}
+            </button>
+          ))}
+        </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => handleDownloadClean(lang)}
-                      disabled={busy !== ""}
-                      className="focus-ring rounded-full border border-admin px-4 py-2 text-xs font-semibold text-admin hover:bg-admin-soft disabled:opacity-50"
-                    >
-                      {busy === "clean-" + lang ? "Дайындалуда..." : "Word жүктеп алу"}
-                    </button>
-
-                    <label className="focus-ring cursor-pointer rounded-full bg-teacher px-4 py-2 text-xs font-semibold text-white hover:opacity-90">
-                      {busy === "pdf-" + lang ? "Жүктелуде..." : ready ? "PDF ауыстыру" : "PDF салу"}
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        disabled={busy !== ""}
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          e.target.value = "";
-                          if (f) handleUploadPdf(lang, f);
-                        }}
-                      />
-                    </label>
-
-                    {ready && (
-                      <a
-                        href={ready.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="focus-ring rounded-full px-3 py-2 text-xs font-semibold text-ink/50 hover:text-ink"
-                      >
-                        Қарау ↗
-                      </a>
-                    )}
-                  </div>
+        <div className="mt-4 flex flex-col gap-3">
+          {langs.map((lang) => {
+            const ready = printFiles[lang];
+            return (
+              <div
+                key={lang}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink/10 bg-white px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    {mono ? "Файл" : lang === "kk" ? "Қазақша" : "Орысша"}
+                  </p>
+                  <p
+                    className={`font-mono text-xs ${ready ? "text-parent" : "text-ink/50"}`}
+                  >
+                    {ready ? "PDF дайын ✓" : "PDF жүктелмеген"}
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="focus-ring cursor-pointer rounded-full bg-teacher px-4 py-2 text-xs font-semibold text-white hover:opacity-90">
+                    {busy === "pdf-" + lang ? "Жүктелуде..." : ready ? "PDF ауыстыру" : "PDF салу"}
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      disabled={busy !== ""}
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) handleUploadPdf(lang, f);
+                      }}
+                    />
+                  </label>
+
+                  {ready && (
+                    <a
+                      href={ready.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="focus-ring rounded-full px-3 py-2 text-xs font-semibold text-ink/50 hover:text-ink"
+                    >
+                      Қарау ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {parsed && (
         <>
