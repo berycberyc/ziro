@@ -3,14 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { useLang } from "@/lib/LangContext";
 import {
-  SUBJECT_LABELS,
   SUBJECT_MINUTES,
   QUANTITY_CHOICE_LABELS,
   MONOLINGUAL_SUBJECTS,
   type SubjectKey,
 } from "@/lib/questions/subjects";
+import {
+  TEST_TEXT,
+  TEST_SUBJECT_LABELS,
+  formatStartMoment,
+  type TestLang,
+  type TestText,
+} from "@/lib/i18n-test";
 import MathText from "@/components/MathText";
 
 type QuestionPublic = {
@@ -42,15 +47,31 @@ type Phase =
 
 type SaveState = "idle" | "saving" | "saved" | "retrying";
 
+/** Қате мәтіні тіл белгілі болғанша сақталып тұруы үшін — кілт түрінде. */
+type ErrorKey =
+  | "errNotFound"
+  | "errNoSession"
+  | "errNoBlocks"
+  | "errNoQuestions"
+  | "errLoadQuestions"
+  | "errStart"
+  | "errFinish"
+  | "errDeadlinePassed"
+  | "errBlockOver";
+
 const LETTERS = ["A", "B", "C", "D"] as const;
 
 export default function TestTakingPage() {
   const params = useParams();
   const registrationId = params.registrationId as string;
-  const { lang } = useLang();
+
+  // Экранның тілі — оқушының карточкасындағы тіл. Сайттың тіл ауыстырғышы
+  // мұнда қатысы жоқ: оқушы жүйеге кірмей, өз телефонынан кіреді.
+  const [lang, setLang] = useState<TestLang>("kk");
+  const t: TestText = TEST_TEXT[lang];
 
   const [phase, setPhase] = useState<Phase>("loading");
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorKey, setErrorKey] = useState<ErrorKey | "">("");
 
   const [blocks, setBlocks] = useState<SubjectKey[]>([]);
   const [subjectIndex, setSubjectIndex] = useState(0);
@@ -134,10 +155,8 @@ export default function TestTakingPage() {
           queueRef.current = [];
           workingRef.current = false;
           setSaveState("idle");
-          setErrorMsg(
-            msg.includes("deadline_passed")
-              ? "Тестке берілген жалпы уақыт аяқталды. Жауаптарыңыз сақталды."
-              : "Бұл блоктың уақыты аяқталды. Жауаптарыңыз сақталды."
+          setErrorKey(
+            msg.includes("deadline_passed") ? "errDeadlinePassed" : "errBlockOver"
           );
           setPhase("finished");
           return;
@@ -239,12 +258,16 @@ export default function TestTakingPage() {
       if (cancelled) return;
 
       if (error || !data) {
-        setErrorMsg("Брондау табылмады немесе онлайн формат емес.");
+        setErrorKey("errNotFound");
         setPhase("error");
         return;
       }
 
       const result = data as any;
+
+      // Ең бірінші — тіл. Қалған бәрі осы тілде көрсетіледі.
+      setLang(result.student_language === "ru" ? "ru" : "kk");
+
       noteServerTime(result.server_now);
 
       const toMs = (v: string | null | undefined) =>
@@ -267,13 +290,13 @@ export default function TestTakingPage() {
       }
 
       if (!result.session_id) {
-        setErrorMsg("Сессия деректері табылмады. Ұйымдастырушыға хабарласыңыз.");
+        setErrorKey("errNoSession");
         setPhase("error");
         return;
       }
       const blockList: SubjectKey[] = result.blocks ?? [];
       if (blockList.length === 0) {
-        setErrorMsg("Бұл тест түріне пәндер тізімі бапталмаған.");
+        setErrorKey("errNoBlocks");
         setPhase("error");
         return;
       }
@@ -331,7 +354,7 @@ export default function TestTakingPage() {
         await loadQuestions(subject, Number(result.variant_number) || 1, result.session_id);
       } catch (err) {
         console.error("Failed to load questions:", err);
-        setErrorMsg("Сұрақтарды жүктеу кезінде қате шықты. Бетті жаңартып көріңіз.");
+        setErrorKey("errLoadQuestions");
         setPhase("error");
         return;
       }
@@ -418,7 +441,7 @@ export default function TestTakingPage() {
   async function handleStartSubject() {
     if (busy) return;
     if (!currentSubject || !sessionId) {
-      setErrorMsg("Тестті бастау мүмкін болмады. Бетті жаңартып көріңіз.");
+      setErrorKey("errStart");
       setPhase("error");
       return;
     }
@@ -426,7 +449,7 @@ export default function TestTakingPage() {
     try {
       const loaded = await loadQuestions(currentSubject, variantNumber, sessionId);
       if (loaded === 0) {
-        setErrorMsg("Бұл пән бойынша сұрақтар табылмады. Ұйымдастырушыға хабарласыңыз.");
+        setErrorKey("errNoQuestions");
         setPhase("error");
         return;
       }
@@ -452,7 +475,7 @@ export default function TestTakingPage() {
       setPhase("question");
     } catch (err) {
       console.error("Failed to start subject:", err);
-      setErrorMsg("Тестті бастау мүмкін болмады. Интернетті тексеріп, қайталаңыз.");
+      setErrorKey("errStart");
       setPhase("error");
     } finally {
       setBusy(false);
@@ -493,7 +516,7 @@ export default function TestTakingPage() {
       setPhase("ready");
     } catch (err) {
       console.error("Failed to finish block:", err);
-      setErrorMsg("Блокты аяқтау кезінде қате шықты. Интернетті тексеріп, бетті жаңартыңыз.");
+      setErrorKey("errFinish");
       setPhase("error");
     } finally {
       setBusy(false);
@@ -557,20 +580,16 @@ export default function TestTakingPage() {
   // ------------------------------------------------------------------
   // Экрандар
   // ------------------------------------------------------------------
-  if (phase === "loading") return <main className="p-10 text-center text-ink/50">Жүктелуде...</main>;
+  if (phase === "loading") return <main className="p-10 text-center text-ink/50">{t.loading}</main>;
 
   if (phase === "error")
-    return <main className="p-10 text-center text-red-600">{errorMsg}</main>;
+    return (
+      <main className="p-10 text-center text-red-600">{errorKey ? t[errorKey] : ""}</main>
+    );
 
   if (phase === "waiting") {
     const startText = startsAt
-      ? new Date(startsAt - clockOffsetRef.current).toLocaleString("ru-RU", {
-          day: "numeric",
-          month: "long",
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "Asia/Almaty",
-        })
+      ? formatStartMoment(startsAt - clockOffsetRef.current, lang)
       : "";
     // 10 минут қалғанда осы беттің өзі кері санаққа айналады.
     const showCountdown = untilStart !== null && untilStart <= 10 * 60;
@@ -578,28 +597,21 @@ export default function TestTakingPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
-          <h1 className="font-display text-xl font-bold text-ink">Тест әлі басталған жоқ</h1>
-          <p className="mt-3 text-sm text-ink/70">
-            Тест <b>{startText}</b> (Астана уақыты) басталады.
-          </p>
+          <h1 className="font-display text-xl font-bold text-ink">{t.waitingTitle}</h1>
+          <p className="mt-3 text-sm text-ink/70">{t.waitingWhen(startText)}</p>
 
           {showCountdown ? (
             <>
               <p className="mt-6 font-mono text-5xl font-bold tabular-nums text-teacher">
                 {formatTime(untilStart ?? 0)}
               </p>
-              <p className="mt-2 text-xs text-ink/50">Тест өзі ашылады, бетті жаңартудың қажеті жоқ.</p>
+              <p className="mt-2 text-xs text-ink/50">{t.waitingSelfOpens}</p>
             </>
           ) : (
-            <p className="mt-4 text-sm text-ink/60">
-              Басталуға 10 минут қалғанда осы бетте кері санақ шығады. Осы бетті ашық қалдыруға
-              болады.
-            </p>
+            <p className="mt-4 text-sm text-ink/60">{t.waitingHint}</p>
           )}
 
-          <p className="mt-6 text-xs leading-relaxed text-ink/50">
-            Кіру тест басталғаннан кейін 30 минут бойы ашық. Одан кейін кіру мүмкін емес.
-          </p>
+          <p className="mt-6 text-xs leading-relaxed text-ink/50">{t.waitingEntryRule}</p>
         </div>
       </div>
     );
@@ -609,13 +621,9 @@ export default function TestTakingPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
-          <h1 className="font-display text-xl font-bold text-clay">Кіру жабылды</h1>
-          <p className="mt-3 text-sm text-ink/70">
-            Тестке кіру басталғаннан кейін 30 минут бойы ашық болды, ол уақыт өтіп кетті.
-          </p>
-          <p className="mt-3 text-xs text-ink/50">
-            Бұл ереже барлық қатысушыға бірдей қолданылады.
-          </p>
+          <h1 className="font-display text-xl font-bold text-clay">{t.entryClosedTitle}</h1>
+          <p className="mt-3 text-sm text-ink/70">{t.entryClosedBody}</p>
+          <p className="mt-3 text-xs text-ink/50">{t.entryClosedNote}</p>
         </div>
       </div>
     );
@@ -625,12 +633,11 @@ export default function TestTakingPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 shadow-lg">
-          <h1 className="font-display text-xl font-bold text-ink">Тест ережелері</h1>
+          <h1 className="font-display text-xl font-bold text-ink">{t.consentTitle}</h1>
           <ul className="mt-4 space-y-2 text-sm leading-relaxed text-ink/70">
-            <li>• Әр пәнге белгіленген уақыт беріледі. Уақыт біткенде блок автоматты жабылады.</li>
-            <li>• Уақыт сервер бойынша есептеледі — бетті жаңартсаңыз да жалғаса береді.</li>
-            <li>• Блок ішінде сұрақтар арасында еркін жүруге, жауапты өзгертуге болады.</li>
-            <li>• Блокты аяқтағаннан кейін оған қайта оралу мүмкін емес.</li>
+            {t.consentRules.map((rule) => (
+              <li key={rule}>• {rule}</li>
+            ))}
           </ul>
           <label className="mt-5 flex items-start gap-2 text-sm text-ink/70">
             <input
@@ -639,14 +646,14 @@ export default function TestTakingPage() {
               onChange={(e) => setConsentChecked(e.target.checked)}
               className="mt-0.5 h-4 w-4"
             />
-            Мен осы ережелермен таныстым.
+            {t.consentCheck}
           </label>
           <button
             onClick={handleConfirmConsent}
             disabled={!consentChecked}
             className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
           >
-            Жалғастыру
+            {t.consentContinue}
           </button>
         </div>
       </div>
@@ -658,37 +665,35 @@ export default function TestTakingPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
-          {isBreak && <p className="font-display text-sm font-bold text-teacher">Үзіліс</p>}
+          {isBreak && <p className="font-display text-sm font-bold text-teacher">{t.breakLabel}</p>}
           <h1 className="mt-1 font-display text-xl font-bold text-ink">
-            {currentSubject && SUBJECT_LABELS[currentSubject]}
+            {currentSubject && TEST_SUBJECT_LABELS[currentSubject][lang]}
           </h1>
           <p className="mt-2 text-sm text-ink/60">
-            Уақыт: {currentSubject && SUBJECT_MINUTES[currentSubject]} минут.
+            {currentSubject && t.blockMinutes(SUBJECT_MINUTES[currentSubject])}
           </p>
 
           {isBreak && (
             <>
               <p className="mt-5 text-xs text-ink/50">
-                {currentSubject && SUBJECT_LABELS[currentSubject]} пәніне дейін:
+                {currentSubject && t.untilSubject(TEST_SUBJECT_LABELS[currentSubject][lang])}
               </p>
               <p className="mt-1 font-mono text-4xl font-bold tabular-nums text-teacher">
                 {formatTime(breakLeft ?? 0)}
               </p>
-              <p className="mt-2 text-xs text-ink/50">
-                Дайын болсаңыз — қазір бастаңыз. Баспасаңыз, уақыт біткенде блок өзі басталады.
-              </p>
+              <p className="mt-2 text-xs text-ink/50">{t.breakHint}</p>
             </>
           )}
 
           <p className="mt-3 text-xs text-ink/40">
-            Блок {subjectIndex + 1} / {blocks.length}
+            {t.blockCounter(subjectIndex + 1, blocks.length)}
           </p>
           <button
             onClick={handleStartSubject}
             disabled={busy}
             className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {busy ? "Жүктелуде..." : isBreak ? "Қазір бастау" : "Бастау"}
+            {busy ? t.loading : isBreak ? t.startNow : t.start}
           </button>
         </div>
       </div>
@@ -699,11 +704,8 @@ export default function TestTakingPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
-          <h1 className="font-display text-xl font-bold text-parent">Тест аяқталды</h1>
-          <p className="mt-4 text-sm text-ink/70">
-            Жауаптарыңыз қабылданды. Нәтиже барлық қатысушы тапсырғаннан кейін жеке кабинетте
-            жарияланады.
-          </p>
+          <h1 className="font-display text-xl font-bold text-parent">{t.finishedTitle}</h1>
+          <p className="mt-4 text-sm text-ink/70">{t.finishedBody}</p>
         </div>
       </div>
     );
@@ -711,7 +713,7 @@ export default function TestTakingPage() {
 
   // ---------------- phase === "question" ----------------
   const q = questions[qIndex];
-  if (!q) return <main className="p-10 text-center text-ink/50">Жүктелуде...</main>;
+  if (!q) return <main className="p-10 text-center text-ink/50">{t.loading}</main>;
 
   const answered = questions.filter((x) => answers[x.question_number]).length;
   const unanswered = questions.length - answered;
@@ -724,10 +726,10 @@ export default function TestTakingPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="font-display font-bold text-ink">
-              {currentSubject && SUBJECT_LABELS[currentSubject]}
+              {currentSubject && TEST_SUBJECT_LABELS[currentSubject][lang]}
             </p>
             <p className="font-mono text-xs text-ink/50">
-              {answered} / {questions.length} жауап берілді
+              {t.answeredOf(answered, questions.length)}
             </p>
           </div>
           <div
@@ -763,11 +765,9 @@ export default function TestTakingPage() {
         </div>
 
         <p className="mt-2 font-mono text-[11px] text-ink/40">
-          {saveState === "saving" && "Сақталуда..."}
-          {saveState === "saved" && "Сақталды ✓"}
-          {saveState === "retrying" && (
-            <span className="text-red-600">Байланыс жоқ — қайта жіберілуде...</span>
-          )}
+          {saveState === "saving" && t.saving}
+          {saveState === "saved" && t.saved}
+          {saveState === "retrying" && <span className="text-red-600">{t.retrying}</span>}
         </p>
       </div>
 
@@ -788,7 +788,7 @@ export default function TestTakingPage() {
             value={current}
             onChange={(e) => handleNumeric(q.question_number, e.target.value)}
             inputMode="numeric"
-            placeholder="Жауап"
+            placeholder={t.answerPlaceholder}
             className="focus-ring mt-3 w-40 rounded-xl border border-ink/15 px-3 py-2 text-sm"
           />
         )}
@@ -819,11 +819,11 @@ export default function TestTakingPage() {
           <>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-ink/10 p-3 text-sm">
-                <p className="mb-1 font-mono text-xs font-semibold text-ink/40">А бағаны</p>
+                <p className="mb-1 font-mono text-xs font-semibold text-ink/40">{t.columnA}</p>
                 <MathText text={(lang === "kk" ? q.column_a_kk : q.column_a_ru) ?? ""} />
               </div>
               <div className="rounded-xl border border-ink/10 p-3 text-sm">
-                <p className="mb-1 font-mono text-xs font-semibold text-ink/40">В бағаны</p>
+                <p className="mb-1 font-mono text-xs font-semibold text-ink/40">{t.columnB}</p>
                 <MathText text={(lang === "kk" ? q.column_b_kk : q.column_b_ru) ?? ""} />
               </div>
             </div>
@@ -858,14 +858,14 @@ export default function TestTakingPage() {
           disabled={qIndex === 0}
           className="focus-ring rounded-full border border-ink/15 px-5 py-2.5 text-sm font-semibold text-ink/70 disabled:opacity-40"
         >
-          ← Алдыңғы
+          {t.prev}
         </button>
         <button
           onClick={() => setQIndex((i) => Math.min(questions.length - 1, i + 1))}
           disabled={qIndex >= questions.length - 1}
           className="focus-ring rounded-full border border-ink/15 px-5 py-2.5 text-sm font-semibold text-ink/70 disabled:opacity-40"
         >
-          Келесі →
+          {t.next}
         </button>
       </div>
 
@@ -874,30 +874,27 @@ export default function TestTakingPage() {
         disabled={busy}
         className="focus-ring mt-6 w-full rounded-full bg-ink px-5 py-3 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"
       >
-        {busy ? "Жіберілуде..." : "Блокты аяқтау"}
+        {busy ? t.sending : t.finishBlock}
       </button>
 
       {confirmFinish && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/60 px-4">
           <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-xl">
-            <p className="font-display text-lg font-bold text-ink">Блокты аяқтау</p>
-            <p className="mt-3 text-sm text-ink/70">
-              <b>{unanswered}</b> сұраққа жауап берілмеген. Блокты аяқтасаңыз, оған қайта оралу
-              мүмкін емес.
-            </p>
+            <p className="font-display text-lg font-bold text-ink">{t.finishBlock}</p>
+            <p className="mt-3 text-sm text-ink/70">{t.confirmBody(unanswered)}</p>
             <div className="mt-5 flex gap-3">
               <button
                 onClick={() => setConfirmFinish(false)}
                 className="focus-ring flex-1 rounded-full border border-ink/15 px-4 py-2.5 text-sm font-semibold text-ink/70"
               >
-                Оралу
+                {t.confirmBack}
               </button>
               <button
                 onClick={finishBlock}
                 disabled={busy}
                 className="focus-ring flex-1 rounded-full bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
-                Аяқтау
+                {t.confirmFinish}
               </button>
             </div>
           </div>
