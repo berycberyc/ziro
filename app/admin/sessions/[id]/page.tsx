@@ -282,6 +282,12 @@ export default function AdminSessionDetailPage() {
         >
           Сұрақтарды енгізу →
         </a>
+        <a
+          href={`/admin/sessions/${session.id}/print`}
+          className="focus-ring rounded-full border border-teacher px-4 py-2 text-sm font-medium text-teacher hover:bg-teacher-soft"
+        >
+          Басып шығару
+        </a>
         <button
           onClick={() => updateSessionField("is_checking", !session.is_checking)}
           className={`focus-ring rounded-full border px-4 py-2 text-sm font-medium ${
