@@ -58,6 +58,9 @@ export default function ScoringPage() {
   const [mismatches, setMismatches] = useState<Mismatch[]>([]);
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
+  // Онлайн тапсырушылардың жағдайы: әлі жазып отырғаны бар ма?
+  const [online, setOnline] = useState<{ total: number; writing: number } | null>(null);
+  const [confirmCollect, setConfirmCollect] = useState(false);
 
   useEffect(() => {
     supabase
@@ -90,9 +93,48 @@ export default function ScoringPage() {
     setCounts(map);
   };
 
+  /**
+   * Осы сессияда әлі жазып отырғандар саны.
+   *
+   * Неге керек: «Онлайн жауаптарды жинау» батырмасы кім тапсырғанына
+   * қарамайды — жазып отырғанның жартылай жауабын да көшіріп алады.
+   * Ерте басып, содан кейін «Есептеу» басылса, нәтиже қате болады және
+   * бұл туралы ешқандай ескерту шықпайды. Сондықтан санды көзбен көрсетеміз.
+   */
+  const refreshOnlineStatus = async (sessionId: string) => {
+    if (!sessionId) return;
+    const regs = await fetchAll<any>((from, to) =>
+      supabase
+        .from("registrations")
+        .select("id")
+        .eq("test_session_id", sessionId)
+        .eq("format", "online")
+        .eq("payment_status", "paid")
+        .order("id")
+        .range(from, to)
+    );
+    if (regs.length === 0) {
+      setOnline({ total: 0, writing: 0 });
+      return;
+    }
+    const attempts = await fetchAll<any>((from, to) =>
+      supabase
+        .from("test_attempts")
+        .select("registration_id, status")
+        .in("registration_id", regs.map((r) => r.id))
+        .order("registration_id")
+        .range(from, to)
+    );
+    setOnline({
+      total: regs.length,
+      writing: attempts.filter((a) => a.status === "in_progress").length,
+    });
+  };
+
   useEffect(() => {
     if (!selectedId) return;
     refreshCounts(selectedId);
+    refreshOnlineStatus(selectedId);
     supabase
       .from("test_sessions")
       .select("results_published_at")
@@ -266,6 +308,7 @@ export default function ScoringPage() {
       }
 
       await refreshCounts(selectedId);
+      await refreshOnlineStatus(selectedId);
       setMessage(`Онлайн жауаптар жиналды: ${rows.length} парақ.`);
     } catch (err: any) {
       console.error(err);
@@ -907,13 +950,59 @@ export default function ScoringPage() {
               Браузерде тапсырғандардың жауаптарын ортақ қоймаға көшіреді. Тест аяқталған соң
               басыңыз; қайта басуға болады — жаңасы ескісін ауыстырады.
             </p>
-            <button
-              onClick={handleCollectOnline}
-              disabled={busy !== ""}
-              className="focus-ring mt-3 rounded-full bg-admin px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {busy === "collect" ? "Жиналуда..." : "Онлайн жауаптарды жинау"}
-            </button>
+
+            {online && (
+              <p className="mt-3 font-mono text-xs text-ink/50">
+                Онлайн қатысушы: {online.total} · әлі жазып отыр:{" "}
+                <b className={online.writing > 0 ? "text-red-600" : "text-parent"}>
+                  {online.writing}
+                </b>
+              </p>
+            )}
+
+            {online && online.writing > 0 && (
+              <p className="mt-2 rounded-xl bg-red-50 px-4 py-2.5 text-xs leading-relaxed text-red-700">
+                Әлі жазып отырғандар бар. Қазір жинасаңыз, олардың жауабы жартылай түседі.
+                Кешіккендер кіргеннен бастап толық уақыт алады, сондықтан олар кешірек бітеді —
+                бәрі тапсырғанша күте тұрған дұрыс.
+              </p>
+            )}
+
+            {confirmCollect ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3">
+                <span className="text-sm text-ink/70">
+                  {online?.writing} оқушы әлі жазып отыр. Сонда да жинаймыз ба?
+                </span>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    onClick={() => setConfirmCollect(false)}
+                    className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-xs font-semibold text-ink/60"
+                  >
+                    Болдырмау
+                  </button>
+                  <button
+                    onClick={() => {
+                      setConfirmCollect(false);
+                      handleCollectOnline();
+                    }}
+                    disabled={busy !== ""}
+                    className="focus-ring rounded-full bg-admin px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Иә, жинау
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() =>
+                  online && online.writing > 0 ? setConfirmCollect(true) : handleCollectOnline()
+                }
+                disabled={busy !== ""}
+                className="focus-ring mt-3 rounded-full bg-admin px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {busy === "collect" ? "Жиналуда..." : "Онлайн жауаптарды жинау"}
+              </button>
+            )}
           </section>
 
           {/* 2. ZipGrade */}

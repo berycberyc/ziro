@@ -28,6 +28,9 @@ type SessionInfo = {
   registration_closes_at: string | null;
   is_checking: boolean;
   has_results: boolean;
+  /** Онлайн тест ашылатын нақты сәт. Базада 055 миграциясының триггері
+   *  күн мен уақыттан өзі толтырады — біз тек көрсетеміз. */
+  online_starts_at: string | null;
 };
 
 /** "17:00" не "17:00:00" → "17:00:00". Бос болса — null. */
@@ -36,6 +39,36 @@ function normalizeTime(value: string | null | undefined): string | null {
   const [h, m] = value.split(":");
   if (h === undefined || m === undefined) return null;
   return `${h.padStart(2, "0")}:${m.padStart(2, "0")}:00`;
+}
+
+/**
+ * Базадағы нақты сәтті Астана уақытымен көрсетеді: "18 қазан, 10:00".
+ * МАҢЫЗДЫ: бұл жерде session_date/start_time емес, тестке кіргізетін
+ * функция қарайтын дәл сол өріс көрсетіледі. Сондықтан экранда
+ * көрінгені — жүйе шын мәнінде қолданатын уақыт.
+ */
+const MONTHS_KK = [
+  "қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым",
+  "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан",
+];
+
+function formatAstana(iso: string): string {
+  const parts = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Asia/Almaty",
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (type: string) => parts.find((x) => x.type === type)?.value ?? "";
+  const month = MONTHS_KK[Number(get("month")) - 1] ?? get("month");
+  return `${get("day")} ${month}, ${get("hour")}:${get("minute")}`;
+}
+
+/** Сол сәттен 30 минут кейін — кіру жабылады. */
+function formatAstanaPlus(iso: string, minutes: number): string {
+  return formatAstana(new Date(new Date(iso).getTime() + minutes * 60000).toISOString());
 }
 
 /** "10:00" + 30 → "10:30". Тек көрсету үшін. */
@@ -62,7 +95,7 @@ export default function AdminSessionDetailPage() {
     const { data: sessionData } = await supabase
       .from("test_sessions")
       .select(
-        "id, title_kk, title_ru, session_date, start_time, address, price, registration_opens_at, registration_closes_at, is_checking, has_results"
+        "id, title_kk, title_ru, session_date, start_time, address, price, registration_opens_at, registration_closes_at, is_checking, has_results, online_starts_at"
       )
       .eq("id", sessionId)
       .single();
@@ -98,7 +131,16 @@ export default function AdminSessionDetailPage() {
   }, [load]);
 
   async function updateSessionField(field: string, value: boolean) {
-    await supabase.from("test_sessions").update({ [field]: value }).eq("id", sessionId);
+    // Қате үнсіз жұтылмауы керек: бұрын RLS тыйым салса да, экран ештеңе
+    // болмағандай қайта салынатын.
+    const { error } = await supabase
+      .from("test_sessions")
+      .update({ [field]: value })
+      .eq("id", sessionId);
+    if (error) {
+      alert("Сақталмады: " + error.message);
+      return;
+    }
     load();
   }
 
@@ -136,7 +178,11 @@ export default function AdminSessionDetailPage() {
   }
 
   async function handleDeleteSession() {
-    await supabase.from("test_sessions").delete().eq("id", sessionId);
+    const { error } = await supabase.from("test_sessions").delete().eq("id", sessionId);
+    if (error) {
+      alert("Өшірілмеді: " + error.message);
+      return;
+    }
     router.push("/admin/sessions");
   }
 
@@ -177,6 +223,27 @@ export default function AdminSessionDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Онлайн тесттің кестесі — базадан оқылған нақты сәт бойынша. */}
+      {session.online_starts_at ? (
+        <div className="mt-4 rounded-2xl border border-teacher/30 bg-teacher-soft/40 px-5 py-3">
+          <p className="text-sm text-ink">
+            <b>Онлайн тест:</b> {formatAstana(session.online_starts_at)} басталады
+          </p>
+          <p className="mt-1 text-xs text-ink/60">
+            Кіру {formatAstanaPlus(session.online_starts_at, 30)}-де жабылады. Астана уақыты.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-2xl border border-red-300 bg-red-50 px-5 py-3">
+          <p className="text-sm font-semibold text-red-700">
+            Онлайн тест ашылмайды: басталу уақыты көрсетілмеген.
+          </p>
+          <p className="mt-1 text-xs text-red-700/80">
+            «Өзгерту» батырмасын басып, күні мен басталу уақытын толтырып сақтаңыз.
+          </p>
+        </div>
+      )}
 
       {confirmingDelete && (
         <div className="mt-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3">
