@@ -159,6 +159,14 @@ function paragraphText(p: Element): string {
     .trim();
 }
 
+/** Абзац тек бет үзілімінен тұра ма? */
+function isPageBreakOnly(p: Element): boolean {
+  const breaks = Array.from(p.getElementsByTagNameNS(W, "br")).filter(
+    (b) => b.getAttributeNS(W, "type") === "page" || b.getAttribute("w:type") === "page"
+  );
+  return breaks.length > 0 && paragraphText(p) === "";
+}
+
 function hasImage(p: Element): boolean {
   return (
     p.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "*").length > 0 ||
@@ -219,7 +227,10 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
   const keep: Element[] = [];
   let mode: "header" | "await" | "kk" | "ru" | "passage" = "header";
   let pendingNumber: string | null = null;
-  let droppedImages: Element[] = [];
+  // Басқа тілдегі блоктағы суреттер: жоғалмауы үшін сақтап, осы тілдегі
+  // сұрақтың мәтінінен КЕЙІН қоямыз. Бұрын кезектің соңына түсіп, келесі
+  // сұрақтың алдында тұрып қалатын.
+  let pendingImages: Element[] = [];
   let keptImageInQuestion = false;
 
   for (const el of Array.from(body.children)) {
@@ -234,9 +245,9 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
 
     if (key) {
       if (/^question\s*\d+$/.test(key)) {
-        // Алдыңғы сұрақтың суреті қалмаса — қосамыз.
-        if (droppedImages.length > 0 && !keptImageInQuestion) keep.push(...droppedImages);
-        droppedImages = [];
+        // Сұрақ мәтіні табылмай қалса да сурет жоғалмасын.
+        if (pendingImages.length > 0 && !keptImageInQuestion) keep.push(...pendingImages);
+        pendingImages = [];
         keptImageInQuestion = false;
         pendingNumber = `${key.match(/\d+/)![0]}. `;
         mode = "await";
@@ -277,13 +288,18 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
     }
 
     if ((mode === "kk" || mode === "ru") && mode !== lang) {
-      if (hasImage(el)) droppedImages.push(el);
+      if (hasImage(el)) pendingImages.push(el);
       continue;
     }
     if (mode === "header") continue;
 
-    if (pendingNumber && text) {
-      const run = makeNumberRun(doc, pendingNumber);
+    // Бет үзілімдері екі тілде бірдей болуы үшін алынып тасталады —
+    // беттің бөлінуін пайдаланушы өзі қайта қояды.
+    if (isPageBreakOnly(el)) continue;
+
+    const isQuestionText = Boolean(pendingNumber && text);
+    if (isQuestionText) {
+      const run = makeNumberRun(doc, pendingNumber!);
       const first = el.firstElementChild;
       if (first && first.localName === "pPr") el.insertBefore(run, first.nextSibling);
       else el.insertBefore(run, el.firstChild);
@@ -291,9 +307,16 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
     }
     if (hasImage(el)) keptImageInQuestion = true;
     keep.push(el);
+
+    // Сұрақтың мәтінінен кейін — сол сұрақтың суреті.
+    if (isQuestionText && pendingImages.length > 0) {
+      keep.push(...pendingImages);
+      pendingImages = [];
+      keptImageInQuestion = true;
+    }
   }
 
-  if (droppedImages.length > 0 && !keptImageInQuestion) keep.push(...droppedImages);
+  if (pendingImages.length > 0 && !keptImageInQuestion) keep.push(...pendingImages);
 
   while (body.firstChild) body.removeChild(body.firstChild);
   keep.forEach((el) => body.appendChild(el));
