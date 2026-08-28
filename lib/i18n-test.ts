@@ -97,6 +97,12 @@ export type TestText = {
   startNow: string;
   start: string;
 
+  // Оқушы жоқта уақыты өтіп кеткен блок
+  expiredTitle: string;
+  expiredBody: string;
+  expiredNext: string;
+  expiredFinish: string;
+
   // Аяқталды
   finishedTitle: string;
   finishedBody: string;
@@ -163,6 +169,12 @@ export const TEST_TEXT: Record<TestLang, TestText> = {
     startNow: "Қазір бастау",
     start: "Бастау",
 
+    expiredTitle: "Бұл блоктың уақыты бітті",
+    expiredBody:
+      "Сіз бетте болмаған кезде осы блоктың уақыты аяқталды. Берген жауаптарыңыз сақталды.",
+    expiredNext: "Келесі блокқа өту",
+    expiredFinish: "Тестті аяқтау",
+
     finishedTitle: "Тест аяқталды",
     finishedBody:
       "Жауаптарыңыз қабылданды. Нәтиже барлық қатысушы тапсырғаннан кейін жеке кабинетте жарияланады.",
@@ -227,6 +239,12 @@ export const TEST_TEXT: Record<TestLang, TestText> = {
     blockCounter: (current, total) => `Блок ${current} из ${total}`,
     startNow: "Начать сейчас",
     start: "Начать",
+
+    expiredTitle: "Время этого блока истекло",
+    expiredBody:
+      "Пока вас не было на странице, время этого блока закончилось. Ваши ответы сохранены.",
+    expiredNext: "Перейти к следующему блоку",
+    expiredFinish: "Завершить тест",
 
     finishedTitle: "Тест завершён",
     finishedBody:

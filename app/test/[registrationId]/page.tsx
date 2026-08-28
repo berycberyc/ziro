@@ -95,6 +95,9 @@ export default function TestTakingPage() {
   const [untilStart, setUntilStart] = useState<number | null>(null);
   const [breakLeft, setBreakLeft] = useState<number | null>(null);
   const [consentChecked, setConsentChecked] = useState(false);
+  // Оқушы жоқта блоктың уақыты бітіп кеткен бе. Ондайда «Бастау» емес,
+  // басқа экран көрсетеміз — әйтпесе бала бастап, бірден лақтырылады.
+  const [blockExpired, setBlockExpired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
 
@@ -344,7 +347,8 @@ export default function TestTakingPage() {
       const left = deadline ? Math.round((deadline - Date.now()) / 1000) : 0;
 
       if (left <= 0) {
-        // Уақыт біткен — блокты жабамыз.
+        // Уақыт біткен: бастау экраны емес, «уақыт бітті» экраны.
+        setBlockExpired(true);
         setPhase("ready");
         setSecondsLeft(0);
         return;
@@ -390,8 +394,10 @@ export default function TestTakingPage() {
   }, [phase, startsAt]);
 
   // Үзіліс: 5 минут кері санақ, нөлге жеткенде келесі блок өзі басталады.
+  // Уақыты бітіп кеткен блокта бұл жүрмеуі керек: онда бастайтын ештеңе жоқ,
+  // әйтпесе жаңа экран көрінбей, бала бірден лақтырылады.
   useEffect(() => {
-    if (phase !== "ready" || breakEndsAt === null) return;
+    if (phase !== "ready" || breakEndsAt === null || blockExpired) return;
     const tick = () => {
       const left = Math.round((breakEndsAt - Date.now()) / 1000);
       setBreakLeft(left);
@@ -400,7 +406,7 @@ export default function TestTakingPage() {
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [phase, breakEndsAt]);
+  }, [phase, breakEndsAt, blockExpired]);
 
   // Қалпына келтіргеннен кейін бірінші бос сұраққа тұрамыз.
   const positionedRef = useRef(false);
@@ -472,6 +478,7 @@ export default function TestTakingPage() {
       );
       positionedRef.current = false;
       setQIndex(0);
+      setBlockExpired(false);
       setPhase("question");
     } catch (err) {
       console.error("Failed to start subject:", err);
@@ -513,6 +520,7 @@ export default function TestTakingPage() {
       deadlineRef.current = null;
       setSecondsLeft(null);
       positionedRef.current = false;
+      setBlockExpired(false);
       setPhase("ready");
     } catch (err) {
       console.error("Failed to finish block:", err);
@@ -654,6 +662,32 @@ export default function TestTakingPage() {
             className="focus-ring mt-5 w-full rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
           >
             {t.consentContinue}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Уақыты бітіп кеткен блок: бастайтын ештеңе жоқ, тек әрі қарай өту.
+  if (phase === "ready" && blockExpired) {
+    const isLast = subjectIndex + 1 >= blocks.length;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-parchment px-4">
+        <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 text-center shadow-lg">
+          <h1 className="font-display text-xl font-bold text-clay">{t.expiredTitle}</h1>
+          <p className="mt-2 text-sm font-semibold text-ink/70">
+            {currentSubject && TEST_SUBJECT_LABELS[currentSubject][lang]}
+          </p>
+          <p className="mt-3 text-sm text-ink/70">{t.expiredBody}</p>
+          <p className="mt-3 text-xs text-ink/40">
+            {t.blockCounter(subjectIndex + 1, blocks.length)}
+          </p>
+          <button
+            onClick={finishBlock}
+            disabled={busy}
+            className="focus-ring mt-5 w-full rounded-full bg-ink px-5 py-3 text-sm font-bold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+          >
+            {busy ? t.sending : isLast ? t.expiredFinish : t.expiredNext}
           </button>
         </div>
       </div>
