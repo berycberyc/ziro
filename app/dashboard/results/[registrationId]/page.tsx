@@ -55,6 +55,9 @@ export default function ResultsPage() {
   const [testTypeCode, setTestTypeCode] = useState<string>("");
   const [mine, setMine] = useState<Published | null>(null);
   const [all, setAll] = useState<Row[]>([]);
+  // Нәтиже жарияланған ба — «әлі дайын емес» пен «тапсырмаған» екеуін
+  // ажырату үшін керек. Бұрын екеуіне бірдей хабарлама шығатын.
+  const [published, setPublished] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -79,6 +82,13 @@ export default function ResultsPage() {
         .single();
       setStudentName(student?.full_name ?? "");
 
+      const { data: sess } = await supabase
+        .from("test_sessions")
+        .select("results_published_at")
+        .eq("id", (reg as any).test_session_id)
+        .single();
+      setPublished(Boolean((sess as any)?.results_published_at));
+
       try {
         const rows = await fetchAll<Published>((from, to) =>
           supabase
@@ -102,12 +112,21 @@ export default function ResultsPage() {
   if (loading) return <p className="mt-6 text-sm text-ink/50">{t.loading}</p>;
 
   if (!mine) {
+    // Нәтиже жарияланған, бірақ бұл баланың жолы жоқ — демек тестке кірмеген.
+    // Ата-анаға «әлі дайын емес» деу дұрыс емес: ол бекер күтіп жүреді.
     return (
       <div className="mx-auto max-w-2xl px-4 py-8">
         <h1 className="font-display text-2xl font-bold text-ink">{t.resultsTitle}</h1>
-        <p className="mt-4 rounded-2xl bg-ink/5 px-4 py-3 text-sm text-ink/60">
-          {t.resultsNotReady}
-        </p>
+        {published ? (
+          <div className="mt-4 rounded-2xl border border-clay/30 bg-clay/5 px-4 py-4">
+            <p className="text-sm font-semibold text-ink">{t.resultsNotTaken}</p>
+            <p className="mt-2 text-sm leading-relaxed text-ink/60">{t.resultsNotTakenNote}</p>
+          </div>
+        ) : (
+          <p className="mt-4 rounded-2xl bg-ink/5 px-4 py-3 text-sm text-ink/60">
+            {t.resultsNotReady}
+          </p>
+        )}
         <Link href="/dashboard/bookings" className="mt-4 inline-block text-sm text-parent hover:underline">
           ← {t.backToBookings}
         </Link>
