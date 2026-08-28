@@ -38,7 +38,8 @@ export default function ImportQuestionsPage() {
 
   const [parsed, setParsed] = useState<ParseResult | null>(null);
   const [fileName, setFileName] = useState("");
-  const [busy, setBusy] = useState(false);
+  // Қай әрекет жүріп жатқанын білдіреді: "" — бос, әйтпесе түйменің аты.
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [topicIds, setTopicIds] = useState<Map<string, string>>(new Map());
@@ -93,7 +94,7 @@ export default function ImportQuestionsPage() {
   }, [subject]);
 
   async function handleFile(file: File) {
-    setBusy(true);
+    setBusy("read");
     setError("");
     setMessage("");
     setParsed(null);
@@ -127,13 +128,13 @@ export default function ImportQuestionsPage() {
       console.error(err);
       setError("Файлды оқу мүмкін болмады: " + (err?.message ?? "белгісіз қате"));
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   }
 
   async function handleSave() {
     if (!parsed || !parsed.variant) return;
-    setBusy(true);
+    setBusy("save");
     setError("");
     setMessage("");
 
@@ -229,7 +230,7 @@ export default function ImportQuestionsPage() {
       console.error(err);
       setError("Сақтау кезінде қате: " + (err?.message ?? "белгісіз"));
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   }
 
@@ -355,11 +356,11 @@ export default function ImportQuestionsPage() {
       </p>
 
       <label className="focus-ring mt-5 inline-block cursor-pointer rounded-full bg-admin px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90">
-        {busy ? "Оқылуда..." : "Word файлын таңдау"}
+        {busy === "read" ? "Оқылуда..." : "Word файлын таңдау"}
         <input
           type="file"
           accept=".docx"
-          disabled={busy}
+          disabled={busy !== ""}
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -574,10 +575,10 @@ export default function ImportQuestionsPage() {
 
           <button
             onClick={handleSave}
-            disabled={blocked || busy}
+            disabled={blocked || busy !== ""}
             className="focus-ring mt-5 w-full rounded-full bg-parent px-6 py-3 text-sm font-bold text-white disabled:opacity-40"
           >
-            {busy
+            {busy === "save"
               ? "Сақталуда..."
               : blocked
               ? "Қате түзетілмейінше сақтауға болмайды"
