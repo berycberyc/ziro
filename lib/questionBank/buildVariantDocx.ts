@@ -49,9 +49,25 @@ async function latexToInlinePng(latex: string): Promise<{ bytes: Uint8Array; wid
   }
 }
 
-/** Splits text on $...$ segments into a mix of plain TextRuns and inline
- * formula images. Text without any $ delimiters is returned completely
- * unchanged (just a single TextRun), so existing content is unaffected. */
+/**
+ * Splits text into plain TextRuns and inline formula images.
+ *
+ * Two delimiters come out of the Word import: `$…$` for a formula sitting
+ * inside a sentence, and `$$…$$` for one the author put on a line of its
+ * own. Only the single form used to be recognised here, so a `$$…$$` text
+ * was split on its outermost dollars instead — leaving stray `$` fragments,
+ * a formula that failed to render, and, worst of all, a question number
+ * that never reached the page.
+ *
+ * That hit exactly the questions whose text is nothing but a formula
+ * (`m/n = 3¾`, `15 < x < 39`), because those are the ones Word stores as a
+ * standalone equation paragraph. Questions with words around the formula
+ * were unaffected, which is why the loss looked random.
+ *
+ * Both forms are now rendered the same way: as an inline image, so the
+ * number and the formula stay on one line. Text with no `$` at all still
+ * comes back as a single unchanged TextRun.
+ */
 async function textToParagraphChildren(
   text: string,
   opts?: { prefix?: string; boldPrefix?: boolean }
@@ -59,14 +75,20 @@ async function textToParagraphChildren(
   const children: ParagraphChild[] = [];
   if (opts?.prefix) children.push(new TextRun({ text: opts.prefix, bold: opts.boldPrefix }));
 
-  const parts = text.split(/(\$[^$]+\$)/g);
+  // $$…$$ is matched first; otherwise the $$ opener would be read as an
+  // empty $…$ and the rest of the formula would leak out as plain text.
+  const parts = text.split(/(\$\$[^$]+\$\$|\$[^$]+\$)/g);
   for (const part of parts) {
-    if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
+    const isBlock = part.startsWith("$$") && part.endsWith("$$") && part.length > 4;
+    const isInline = !isBlock && part.startsWith("$") && part.endsWith("$") && part.length > 2;
+
+    if (isBlock || isInline) {
+      const latex = isBlock ? part.slice(2, -2) : part.slice(1, -1);
       try {
-        const { bytes, width, height } = await latexToInlinePng(part.slice(1, -1));
+        const { bytes, width, height } = await latexToInlinePng(latex);
         children.push(new ImageRun({ type: "png", data: bytes, transformation: { width, height } }));
       } catch {
-        children.push(new TextRun({ text: part })); // fall back to raw text if rendering fails
+        children.push(new TextRun({ text: latex })); // fall back to the formula's own text
       }
     } else if (part.length > 0) {
       children.push(new TextRun({ text: part }));
