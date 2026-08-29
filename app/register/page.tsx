@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { dict, type Lang } from "@/lib/i18n";
+import { useLang } from "@/lib/LangContext";
 import { supabase } from "@/lib/supabase";
 import AuthForm from "@/components/AuthForm";
 
 export default function RegisterPage() {
-  const [lang] = useState<Lang>("kk");
-  const t = dict[lang];
+  const { t } = useLang();
   const [registered, setRegistered] = useState(false);
 
   async function handleRegister(values: Record<string, string>) {

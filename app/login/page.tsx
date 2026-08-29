@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { dict, type Lang } from "@/lib/i18n";
+import { useLang } from "@/lib/LangContext";
 import { supabase } from "@/lib/supabase";
 import AuthForm from "@/components/AuthForm";
 
 export default function LoginPage() {
-  const [lang] = useState<Lang>("kk");
-  const t = dict[lang];
+  // Бұрын мұнда тіл қатып қалған еді ("kk"), сондықтан орыс тілді ата-ана
+  // кіру бетін қазақша ғана көретін. Енді ортақ тіл контекстінен алынады.
+  const { t } = useLang();
   const router = useRouter();
 
   async function handleLogin(values: Record<string, string>) {
@@ -51,6 +51,7 @@ export default function LoginPage() {
         { name: "email", type: "email", label: t.email },
         { name: "password", type: "password", label: t.password },
       ]}
+      belowFormLink={{ href: "/forgot-password", label: t.forgotLink }}
       onSubmit={handleLogin}
     />
   );
