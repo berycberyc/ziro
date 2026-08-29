@@ -197,11 +197,18 @@ async function addHeaderFooter(
 /**
  * Сұрақты жауаптарынан ажыратпау.
  *
- * Word-та «келесіден ажыратпау» деген қасиет бар: абзац келесі абзацпен
- * бір бетте қалады. Соны сұрақтың мәтіні мен жауап нұсқаларына қоямыз —
- * блок бетке сыймаса, Word оны түгелдей келесі бетке көшіреді.
- * Соңғы нұсқаға қойылмайды: әйтпесе келесі сұрақ та жабысып, барлық
- * құжат бір бетке тартылып кетер еді.
+ * Word-та екі бөлек қасиет бар, екеуі де керек:
+ *   • keepNext — абзац келесі абзацпен бір бетте қалады. Сұрақ пен жауап
+ *     нұсқаларын бір-бірінен ажыратпайды.
+ *   • keepLines — абзацтың ӨЗІ екі бетке бөлінбейді. Ұзын сұрақтың мәтіні
+ *     жартылай төменгі бетте, жартылай келесі бетте қалмауы үшін керек.
+ *
+ * Алғашында тек keepNext қойылған еді, сондықтан блоктар бүтін көшкенімен,
+ * ұзын сұрақтың өз мәтіні қақ бөлініп қалатын.
+ *
+ * keepNext соңғы нұсқаға қойылмайды: әйтпесе келесі сұрақ та жабысып,
+ * бүкіл құжат бір бетке тартылып кетер еді. keepLines болса әр абзацқа
+ * қойылады — ол көршісіне әсер етпейді.
  */
 function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>): void {
   const blocks: Element[][] = [];
@@ -215,21 +222,26 @@ function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>
   }
   if (cur.length) blocks.push(cur);
 
+  const addFlag = (el: Element, name: "keepNext" | "keepLines") => {
+    if (el.localName !== "p") return;
+    let pPr = Array.from(el.children).find((c) => c.localName === "pPr");
+    if (!pPr) {
+      pPr = doc.createElementNS(W, "w:pPr");
+      el.insertBefore(pPr, el.firstChild);
+    }
+    if (!Array.from(pPr.children).some((c) => c.localName === name)) {
+      pPr.insertBefore(doc.createElementNS(W, `w:${name}`), pPr.firstChild);
+    }
+  };
+
   for (const block of blocks) {
     // Соңындағы бос абзацтарды есепке алмаймыз.
     let last = block.length - 1;
     while (last > 0 && paragraphText(block[last]) === "" && !hasImage(block[last])) last--;
-    for (let i = 0; i < last; i++) {
-      const el = block[i];
-      if (el.localName !== "p") continue;
-      let pPr = Array.from(el.children).find((c) => c.localName === "pPr");
-      if (!pPr) {
-        pPr = doc.createElementNS(W, "w:pPr");
-        el.insertBefore(pPr, el.firstChild);
-      }
-      if (!Array.from(pPr.children).some((c) => c.localName === "keepNext")) {
-        pPr.insertBefore(doc.createElementNS(W, "w:keepNext"), pPr.firstChild);
-      }
+
+    for (let i = 0; i <= last; i++) {
+      addFlag(block[i], "keepLines");
+      if (i < last) addFlag(block[i], "keepNext");
     }
   }
 }
