@@ -152,11 +152,50 @@ async function writeZip(entries: ZipEntry[]): Promise<Blob> {
 
 const TAG_RE = /^\[([^\]]+)\]\s*([\s\S]*)$/;
 
+/** Word-тың формулалары бөлек кеңістікте сақталады. */
+const M = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+
 function paragraphText(p: Element): string {
   return Array.from(p.getElementsByTagNameNS(W, "t"))
     .map((t) => t.textContent ?? "")
     .join("")
     .trim();
+}
+
+/**
+ * Абзацта формула бар ма.
+ *
+ * Неге керек: paragraphText тек әдеттегі мәтінді санайды, формула оған
+ * көрінбейді. Сондықтан мәтіні жоқ, тек формуладан тұратын сұрақ «бос
+ * абзац» болып саналып, нөмірі қойылмай қалатын. Дәл сол себепті 25, 26
+ * және 40-сұрақтардың нөмірі жоғалған еді — қалған 37-де формуланың
+ * жанында сөз бар, сол сөз абзацты «толық» етіп көрсеткен.
+ */
+function hasMath(p: Element): boolean {
+  return (
+    p.getElementsByTagNameNS(M, "oMath").length > 0 ||
+    p.getElementsByTagNameNS(M, "oMathPara").length > 0
+  );
+}
+
+/**
+ * Жеке жолда тұрған формуланы (oMathPara) жол ішіндегі формулаға (oMath)
+ * айналдырады.
+ *
+ * oMathPara — бұл «өз жолы бар» формула: Word оны бүкіл жолға жайып,
+ * ортаға тұрғызады, сондықтан нөмір оның қасына сыймайды. Ішіндегі
+ * oMath-ты сыртқа шығарсақ, формула жолдың бір бөлігі болады да, нөмір
+ * сол жолда қалады. Формуланың өзі өзгермейді.
+ */
+function inlineMathParas(p: Element): void {
+  for (const para of Array.from(p.getElementsByTagNameNS(M, "oMathPara"))) {
+    const parent = para.parentNode;
+    if (!parent) continue;
+    for (const child of Array.from(para.getElementsByTagNameNS(M, "oMath"))) {
+      parent.insertBefore(child, para);
+    }
+    parent.removeChild(para);
+  }
 }
 
 /** Абзац тек бет үзілімінен тұра ма? */
@@ -297,19 +336,37 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
     // беттің бөлінуін пайдаланушы өзі қайта қояды.
     if (isPageBreakOnly(el)) continue;
 
-    const isQuestionText = Boolean(pendingNumber && text);
-    if (isQuestionText) {
-      const run = makeNumberRun(doc, pendingNumber!);
-      const first = el.firstElementChild;
-      if (first && first.localName === "pPr") el.insertBefore(run, first.nextSibling);
-      else el.insertBefore(run, el.firstChild);
+    // Сұрақтың басы — мәтін де, формула да, сурет те бола алады.
+    // Бұрын тек мәтін есептелетін, сондықтан жалғыз формуладан тұратын
+    // сұрақтың нөмірі қойылмай, кезекте ілініп қалатын.
+    const elHasMath = hasMath(el);
+    const elHasImage = hasImage(el);
+    const isQuestionStart = Boolean(pendingNumber) && (Boolean(text) || elHasMath || elHasImage);
+
+    if (isQuestionStart) {
+      if (!text && !elHasMath && elHasImage) {
+        // Тек суреттен тұратын сұрақ: нөмірді суреттің үстіне, бөлек жолға.
+        // Суреттің қасына қоюға болмайды — ол жолға сыймай, нөмір ығысады.
+        const numberPara = doc.createElementNS(W, "w:p");
+        numberPara.appendChild(makeNumberRun(doc, pendingNumber!));
+        keep.push(numberPara);
+      } else {
+        // Жеке жолдағы формуланы жол ішіне түсіреміз — сонда нөмір
+        // формуланың қасында, бір жолда тұрады.
+        if (elHasMath) inlineMathParas(el);
+        const run = makeNumberRun(doc, pendingNumber!);
+        const first = el.firstElementChild;
+        if (first && first.localName === "pPr") el.insertBefore(run, first.nextSibling);
+        else el.insertBefore(run, el.firstChild);
+      }
       pendingNumber = null;
     }
-    if (hasImage(el)) keptImageInQuestion = true;
+
+    if (elHasImage) keptImageInQuestion = true;
     keep.push(el);
 
     // Сұрақтың мәтінінен кейін — сол сұрақтың суреті.
-    if (isQuestionText && pendingImages.length > 0) {
+    if (isQuestionStart && pendingImages.length > 0) {
       keep.push(...pendingImages);
       pendingImages = [];
       keptImageInQuestion = true;
