@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { compressReceipt, receiptSignedUrl, MAX_RECEIPT_BYTES } from "@/lib/receipts";
 import { getSettings, KASPI_QR_URL, KASPI_PAY_LINK, CONTACT_PHONE } from "@/lib/appSettings";
 import { useLang } from "@/lib/LangContext";
 
@@ -236,12 +237,31 @@ export default function BookingsPage() {
     }
   }
 
-  async function handleReceiptUpload(registrationId: string, file: File) {
+  /** Жабық қоймадан уақытша сілтеме алып, жаңа терезеде ашады. */
+  async function openReceipt(path: string) {
+    const url = await receiptSignedUrl(supabase.storage, path);
+    if (!url) {
+      setReceiptError(t.receiptOpenFailed);
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+  }
+
+  async function handleReceiptUpload(registrationId: string, rawFile: File) {
     setUploadingReceiptId(registrationId);
     setReceiptError("");
 
     try {
-      const ext = file.name.split(".").pop() ?? "jpg";
+      if (rawFile.size > MAX_RECEIPT_BYTES) {
+        setReceiptError(t.receiptTooBig);
+        return;
+      }
+
+      // Жүктер алдында кішірейтеміз: қоймада орын да, ата-ананың
+      // интернеті де үнемделеді.
+      const file = await compressReceipt(rawFile);
+
+      const ext = file.type === "image/jpeg" ? "jpg" : (file.name.split(".").pop() ?? "jpg");
       const path = `${registrationId}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage.from("receipts").upload(path, file, {
@@ -249,16 +269,16 @@ export default function BookingsPage() {
       });
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage.from("receipts").getPublicUrl(path);
-
+      // Қойма жабық (057 миграциясы), сондықтан ашық сілтеме емес — жолды
+      // сақтаймыз. Қарау кезінде уақытша сілтеме сұралады.
       const { error: updateError } = await supabase
         .from("registrations")
-        .update({ receipt_url: publicUrlData.publicUrl })
+        .update({ receipt_url: path })
         .eq("id", registrationId);
       if (updateError) throw updateError;
 
       setBookings((prev) =>
-        prev.map((b) => (b.id === registrationId ? { ...b, receipt_url: publicUrlData.publicUrl } : b))
+        prev.map((b) => (b.id === registrationId ? { ...b, receipt_url: path } : b))
       );
     } catch (err) {
       console.error("Receipt upload failed:", err);
@@ -437,14 +457,12 @@ export default function BookingsPage() {
                   <div className="mt-4 border-t border-ink/10 pt-4">
                     {b.receipt_url ? (
                       <div className="flex flex-wrap items-center gap-3">
-                        <a
-                          href={b.receipt_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 rounded-full bg-parent-soft px-4 py-2 text-sm font-semibold text-parent hover:opacity-90"
+                        <button
+                          onClick={() => openReceipt(b.receipt_url!)}
+                          className="focus-ring flex items-center gap-2 rounded-full bg-parent-soft px-4 py-2 text-sm font-semibold text-parent hover:opacity-90"
                         >
                           {t.receiptSent}
-                        </a>
+                        </button>
                         <label className="focus-ring cursor-pointer rounded-full border border-ink/15 px-4 py-2 text-sm font-medium text-ink/60 hover:bg-parchment">
                           {uploadingReceiptId === b.id ? t.loading : t.receiptReplace}
                           <input

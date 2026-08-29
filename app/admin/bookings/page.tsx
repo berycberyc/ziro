@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { receiptSignedUrl } from "@/lib/receipts";
 import { fetchAll } from "@/lib/fetchAll";
 import PushNotificationButton from "@/components/PushNotificationButton";
 
@@ -101,6 +102,19 @@ export default function BookingsPage() {
   const unpaid = bookings.filter((b) => b.payment_status !== "paid");
   const paid = bookings.filter((b) => b.payment_status === "paid");
 
+  /**
+   * Түбіртек қоймасы жабық (057 миграциясы): тікелей сілтеме жұмыс істемейді,
+   * қарар алдында 10 минуттық уақытша сілтеме сұраймыз.
+   */
+  async function openReceipt(path: string) {
+    const url = await receiptSignedUrl(supabase.storage, path);
+    if (!url) {
+      alert("Түбіртекті ашу мүмкін болмады.");
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+  }
+
   function BookingCard({ b }: { b: Booking }) {
     return (
       <div className="rounded-2xl border border-ink/10 bg-white px-4 py-3 shadow-sm">
@@ -116,10 +130,8 @@ export default function BookingsPage() {
           </button>
 
           {b.receipt_url && (
-            <a
-              href={b.receipt_url}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={() => openReceipt(b.receipt_url!)}
               title="Түбіртекті қарау"
               className="focus-ring shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-gold/15 text-gold-deep hover:bg-gold/25"
             >
@@ -127,7 +139,7 @@ export default function BookingsPage() {
                 <path d="M9 2H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h5m0-20h9a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H9m0-20v20" />
                 <path d="M13 8h4M13 12h4M13 16h4" strokeLinecap="round" />
               </svg>
-            </a>
+            </button>
           )}
 
           {b.payment_status === "paid" ? (
