@@ -222,6 +222,21 @@ function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>
   }
   if (cur.length) blocks.push(cur);
 
+  const setSpaceBefore = (d: Document, el: Element, twips: number) => {
+    if (el.localName !== "p") return;
+    let pPr = Array.from(el.children).find((c) => c.localName === "pPr");
+    if (!pPr) {
+      pPr = d.createElementNS(W, "w:pPr");
+      el.insertBefore(pPr, el.firstChild);
+    }
+    let spacing = Array.from(pPr.children).find((c) => c.localName === "spacing");
+    if (!spacing) {
+      spacing = d.createElementNS(W, "w:spacing");
+      pPr.appendChild(spacing);
+    }
+    spacing.setAttributeNS(W, "w:before", String(twips));
+  };
+
   const addFlag = (el: Element, name: "keepNext" | "keepLines") => {
     if (el.localName !== "p") return;
     let pPr = Array.from(el.children).find((c) => c.localName === "pPr");
@@ -234,15 +249,20 @@ function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>
     }
   };
 
-  for (const block of blocks) {
-    // Соңындағы бос абзацтарды есепке алмаймыз.
-    let last = block.length - 1;
-    while (last > 0 && paragraphText(block[last]) === "" && !hasImage(block[last])) last--;
+  for (let b = 0; b < blocks.length; b++) {
+    const block = blocks[b];
+    const last = block.length - 1;
 
     for (let i = 0; i <= last; i++) {
       addFlag(block[i], "keepLines");
       if (i < last) addFlag(block[i], "keepNext");
     }
+
+    // Сұрақтардың арасындағы аралық — бос жолмен емес, аралықпен.
+    // Бос жол бет ауысқанда жоғарыда жалғыз қалып қоюы мүмкін, ал
+    // аралық олай істемейді: ол жай ғана сұрақты жоғарғысынан
+    // алыстатады. Бірінші сұраққа қойылмайды — беттің басында керегі жоқ.
+    if (b > 0) setSpaceBefore(doc, block[0], 240); // 240 = 12 пункт
   }
 }
 
@@ -568,6 +588,18 @@ export async function buildCleanDocx(
     // Бет үзілімдері екі тілде бірдей болуы үшін алынып тасталады —
     // беттің бөлінуін пайдаланушы өзі қайта қояды.
     if (isPageBreakOnly(el)) continue;
+
+    // Сұрақтың ішіндегі бос жолдар алынып тасталады.
+    //
+    // Неге: бастапқы файлда бос жол әдетте шарт пен жауаптардың арасында
+    // тұрады, ал сұрақтар бір-біріне жабысып қалады — көзбен қарағанда
+    // қайсысы қай сұрақтікі екені білінбейді. Дұрысы керісінше: шарт пен
+    // жауаптар тығыз, ал сұрақтардың арасы бос. Сондықтан ішкі бос
+    // жолдарды алып тастап, сұрақтың алдына аралық қоямыз (төменде,
+    // keepBlocksTogether ішінде).
+    //
+    // Бос жол — мәтіні де, суреті де, формуласы да жоқ абзац.
+    if (!paragraphText(el) && !hasImage(el) && !hasMath(el)) continue;
 
     // Сұрақтың басы — мәтін де, формула да, сурет те бола алады.
     // Бұрын тек мәтін есептелетін, сондықтан жалғыз формуладан тұратын
