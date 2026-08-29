@@ -20,6 +20,7 @@ import {
 } from "@/lib/questions/subjects";
 import MathText from "@/components/MathText";
 import { buildCleanDocx } from "@/lib/print/buildCleanDocx";
+import { TEST_SUBJECT_LABELS } from "@/lib/i18n-test";
 import { MONOLINGUAL_SUBJECTS } from "@/lib/questions/subjects";
 
 /**
@@ -260,7 +261,12 @@ export default function ImportQuestionsPage() {
    */
   async function makeCleanFiles(file: File, variant: number) {
     for (const lang of langs) {
-      const blob = await buildCleanDocx(file, lang);
+      // Колонтитулдағы жазу: пән аты сол тілде + нұсқа нөмірі.
+      const title =
+        lang === "kk"
+          ? `${TEST_SUBJECT_LABELS[subject].kk} — ${variant}-нұсқа`
+          : `${TEST_SUBJECT_LABELS[subject].ru} — вариант ${variant}`;
+      const blob = await buildCleanDocx(file, lang, title);
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `${subject}-nuska${variant}-${lang}.docx`;

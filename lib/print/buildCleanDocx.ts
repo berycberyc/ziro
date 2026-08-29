@@ -18,7 +18,221 @@
  */
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const XML_SPACE = "http://www.w3.org/XML/1998/namespace";
+
+/** Колонтитулдағы логотиптің ені: 3,2 см (EMU-мен, 1 см = 360000). */
+const LOGO_W_EMU = 1152000;
+const LOGO_H_EMU = Math.round(LOGO_W_EMU * 416 / 1188);
+
+/** Біздің қосатын бөліктеріміз — пайдаланушының файлындағымен атаусыз
+ *  қақтығыспау үшін атаулары бөлек. */
+const HDR = "word/ziro-header.xml";
+const FTR = "word/ziro-footer.xml";
+const LOGO = "word/media/ziro-logo.png";
+
+function headerXml(title: string, logoRelId: string): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="${W}" xmlns:r="${R}"
+ xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+ xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+ xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+ <w:p>
+  <w:pPr>
+   <w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>
+   <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="4" w:color="C9CDD3"/></w:pBdr>
+   <w:spacing w:after="120"/>
+  </w:pPr>
+  <w:r><w:drawing>
+   <wp:inline distT="0" distB="0" distL="0" distR="0">
+    <wp:extent cx="${LOGO_W_EMU}" cy="${LOGO_H_EMU}"/>
+    <wp:docPr id="900" name="Ziro"/>
+    <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+     <pic:pic>
+      <pic:nvPicPr><pic:cNvPr id="900" name="Ziro"/><pic:cNvPicPr/></pic:nvPicPr>
+      <pic:blipFill><a:blip r:embed="${logoRelId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+      <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${LOGO_W_EMU}" cy="${LOGO_H_EMU}"/></a:xfrm>
+       <a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
+     </pic:pic></a:graphicData></a:graphic>
+   </wp:inline>
+  </w:drawing></w:r>
+  <w:r><w:tab/></w:r>
+  <w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(title)}</w:t></w:r>
+ </w:p>
+</w:hdr>`;
+}
+
+/** Бет нөмірі — астында, ортада. PAGE өрісін Word өзі толтырады. */
+function footerXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="${W}" xmlns:r="${R}">
+ <w:p>
+  <w:pPr><w:jc w:val="center"/></w:pPr>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+  <w:r><w:rPr><w:sz w:val="18"/></w:rPr><w:t>1</w:t></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+ </w:p>
+</w:ftr>`;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function decode(e: ZipEntry): string {
+  return new TextDecoder("utf-8").decode(e.data);
+}
+function encodeInto(e: ZipEntry, text: string): void {
+  e.data = new TextEncoder().encode(text);
+}
+
+/** Файлда әлі жоқ, бос емес rId нөмірін табады. */
+function nextRelId(relsXml: string): number {
+  const ids = [...relsXml.matchAll(/Id="rId(\d+)"/g)].map((m) => Number(m[1]));
+  return (ids.length ? Math.max(...ids) : 0) + 1;
+}
+
+/**
+ * Колонтитул мен бет нөмірін құжатқа қосады.
+ *
+ * Неге қолмен: құжат нөлден жиналмайды, пайдаланушының файлы тазаланады.
+ * Сондықтан колонтитулды да сол пакеттің ішіне қосамыз — жаңа бөліктер,
+ * оларға сілтеме және sectPr-дегі жазба.
+ */
+async function addHeaderFooter(
+  entries: ZipEntry[],
+  doc: Document,
+  body: Element,
+  title: string
+): Promise<void> {
+  // 1. Логотип. Сайттың өз файлынан алынады.
+  let logoBytes: Uint8Array;
+  try {
+    const res = await fetch("/logo-wide.png");
+    logoBytes = new Uint8Array(await res.arrayBuffer());
+  } catch {
+    return; // логотип жүктелмесе — колонтитулсыз-ақ файл берген жөн
+  }
+  entries.push({ name: LOGO, data: logoBytes });
+
+  // 2. Колонтитулдың өз сілтемесі (логотипке).
+  const logoRelId = "rIdZiroLogo";
+  entries.push({
+    name: "word/_rels/ziro-header.xml.rels",
+    data: new TextEncoder().encode(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="${logoRelId}" Type="${R}/image" Target="media/ziro-logo.png"/>
+</Relationships>`
+    ),
+  });
+
+  entries.push({ name: HDR, data: new TextEncoder().encode(headerXml(title, logoRelId)) });
+  entries.push({ name: FTR, data: new TextEncoder().encode(footerXml()) });
+
+  // 3. Құжаттың сілтемелер тізіміне қосу.
+  const rels = entries.find((e) => e.name === "word/_rels/document.xml.rels");
+  if (!rels) return;
+  let relsXml = decode(rels);
+  const n = nextRelId(relsXml);
+  const hdrId = `rId${n}`;
+  const ftrId = `rId${n + 1}`;
+  relsXml = relsXml.replace(
+    "</Relationships>",
+    `<Relationship Id="${hdrId}" Type="${R}/header" Target="ziro-header.xml"/>` +
+      `<Relationship Id="${ftrId}" Type="${R}/footer" Target="ziro-footer.xml"/>` +
+      "</Relationships>"
+  );
+  encodeInto(rels, relsXml);
+
+  // 4. [Content_Types] — жаңа бөліктердің түрін жариялау.
+  const ct = entries.find((e) => e.name === "[Content_Types].xml");
+  if (ct) {
+    let ctXml = decode(ct);
+    if (!ctXml.includes('Extension="png"')) {
+      ctXml = ctXml.replace("<Types", '<Types').replace(
+        /(<Types[^>]*>)/,
+        '$1<Default Extension="png" ContentType="image/png"/>'
+      );
+    }
+    ctXml = ctXml.replace(
+      "</Types>",
+      '<Override PartName="/word/ziro-header.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
+        '<Override PartName="/word/ziro-footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
+        "</Types>"
+    );
+    encodeInto(ct, ctXml);
+  }
+
+  // 5. sectPr — бетке қай колонтитул тиесілі екенін жазу.
+  //    Схема бойынша бұл жазбалар sectPr-дің ЕҢ БАСЫНДА тұруы керек.
+  let sectPr = Array.from(body.getElementsByTagNameNS(W, "sectPr")).pop() ?? null;
+  if (!sectPr) {
+    sectPr = doc.createElementNS(W, "w:sectPr");
+    body.appendChild(sectPr);
+  }
+  // Бастапқы файлдың колонтитулдары болса — оларды алып тастаймыз.
+  for (const tag of ["headerReference", "footerReference"]) {
+    for (const el of Array.from(sectPr.getElementsByTagNameNS(W, tag))) {
+      el.parentNode?.removeChild(el);
+    }
+  }
+  // titlePg болса, бірінші бет колонтитулсыз қалар еді — өшіреміз.
+  for (const el of Array.from(sectPr.getElementsByTagNameNS(W, "titlePg"))) {
+    el.parentNode?.removeChild(el);
+  }
+
+  const mk = (tag: string, id: string) => {
+    const el = doc.createElementNS(W, `w:${tag}`);
+    el.setAttributeNS(W, "w:type", "default");
+    el.setAttributeNS(R, "r:id", id);
+    return el;
+  };
+  sectPr.insertBefore(mk("footerReference", ftrId), sectPr.firstChild);
+  sectPr.insertBefore(mk("headerReference", hdrId), sectPr.firstChild);
+}
+
+/**
+ * Сұрақты жауаптарынан ажыратпау.
+ *
+ * Word-та «келесіден ажыратпау» деген қасиет бар: абзац келесі абзацпен
+ * бір бетте қалады. Соны сұрақтың мәтіні мен жауап нұсқаларына қоямыз —
+ * блок бетке сыймаса, Word оны түгелдей келесі бетке көшіреді.
+ * Соңғы нұсқаға қойылмайды: әйтпесе келесі сұрақ та жабысып, барлық
+ * құжат бір бетке тартылып кетер еді.
+ */
+function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>): void {
+  const blocks: Element[][] = [];
+  let cur: Element[] = [];
+  for (const el of keep) {
+    if (starts.has(el) && cur.length) {
+      blocks.push(cur);
+      cur = [];
+    }
+    cur.push(el);
+  }
+  if (cur.length) blocks.push(cur);
+
+  for (const block of blocks) {
+    // Соңындағы бос абзацтарды есепке алмаймыз.
+    let last = block.length - 1;
+    while (last > 0 && paragraphText(block[last]) === "" && !hasImage(block[last])) last--;
+    for (let i = 0; i < last; i++) {
+      const el = block[i];
+      if (el.localName !== "p") continue;
+      let pPr = Array.from(el.children).find((c) => c.localName === "pPr");
+      if (!pPr) {
+        pPr = doc.createElementNS(W, "w:pPr");
+        el.insertBefore(pPr, el.firstChild);
+      }
+      if (!Array.from(pPr.children).some((c) => c.localName === "keepNext")) {
+        pPr.insertBefore(doc.createElementNS(W, "w:keepNext"), pPr.firstChild);
+      }
+    }
+  }
+}
 
 async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([bytes as BlobPart])
@@ -253,7 +467,12 @@ function makeNumberRun(doc: Document, text: string): Element {
 }
 
 /** Бір тілге арналған таза көшірме жасайды. */
-export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blob> {
+export async function buildCleanDocx(
+  file: File,
+  lang: "kk" | "ru",
+  /** Колонтитулда шығатын жазу, мысалы «Математика — 1-нұсқа». */
+  headerTitle?: string
+): Promise<Blob> {
   const entries = await readZipEntries(file);
   const docEntry = entries.find((e) => e.name === "word/document.xml");
   if (!docEntry) throw new Error("Файл ішінен word/document.xml табылмады.");
@@ -266,6 +485,8 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
   const keep: Element[] = [];
   let mode: "header" | "await" | "kk" | "ru" | "passage" = "header";
   let pendingNumber: string | null = null;
+  /** Сұрақ басталатын абзацтар — блокты бөлу үшін. */
+  const questionStarts = new Set<Element>();
   // Басқа тілдегі блоктағы суреттер: жоғалмауы үшін сақтап, осы тілдегі
   // сұрақтың мәтінінен КЕЙІН қоямыз. Бұрын кезектің соңына түсіп, келесі
   // сұрақтың алдында тұрып қалатын.
@@ -349,6 +570,7 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
         // Суреттің қасына қоюға болмайды — ол жолға сыймай, нөмір ығысады.
         const numberPara = doc.createElementNS(W, "w:p");
         numberPara.appendChild(makeNumberRun(doc, pendingNumber!));
+        questionStarts.add(numberPara);
         keep.push(numberPara);
       } else {
         // Жеке жолдағы формуланы жол ішіне түсіреміз — сонда нөмір
@@ -358,6 +580,7 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
         const first = el.firstElementChild;
         if (first && first.localName === "pPr") el.insertBefore(run, first.nextSibling);
         else el.insertBefore(run, el.firstChild);
+        questionStarts.add(el);
       }
       pendingNumber = null;
     }
@@ -375,8 +598,12 @@ export async function buildCleanDocx(file: File, lang: "kk" | "ru"): Promise<Blo
 
   if (pendingImages.length > 0 && !keptImageInQuestion) keep.push(...pendingImages);
 
+  keepBlocksTogether(doc, keep, questionStarts);
+
   while (body.firstChild) body.removeChild(body.firstChild);
   keep.forEach((el) => body.appendChild(el));
+
+  if (headerTitle) await addHeaderFooter(entries, doc, body, headerTitle);
 
   const out = new XMLSerializer().serializeToString(doc);
   docEntry.data = new TextEncoder().encode(out);
