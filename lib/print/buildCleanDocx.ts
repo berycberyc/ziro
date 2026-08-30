@@ -41,8 +41,8 @@ function headerXml(title: string, logoRelId: string): string {
  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
  <w:p>
   <w:pPr>
-   <w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>
    <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="4" w:color="C9CDD3"/></w:pBdr>
+   <w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>
    <w:spacing w:after="120"/>
   </w:pPr>
   <w:r><w:drawing>
@@ -109,18 +109,58 @@ async function addHeaderFooter(
   body: Element,
   title: string
 ): Promise<void> {
-  // 1. Логотип. Сайттың өз файлынан алынады.
+  // 1. Логотип. Без него колонтитул не нужен — выходим до любых изменений.
   let logoBytes: Uint8Array;
   try {
     const res = await fetch("/logo-wide.png");
+    if (!res.ok) return;
     logoBytes = new Uint8Array(await res.arrayBuffer());
   } catch {
-    return; // логотип жүктелмесе — колонтитулсыз-ақ файл берген жөн
+    return;
   }
-  entries.push({ name: LOGO, data: logoBytes });
 
-  // 2. Колонтитулдың өз сілтемесі (логотипке).
+  // 2. Байланыстар тізімі. Файлда болмаса — құрамыз, шықпаймыз.
+  //
+  //    Бұрын осы жерде `if (!rels) return` тұрған. Word-та жасалмаған
+  //    файлда бұл бөлік болмайды, сондықтан функция логотип пен
+  //    колонтитулды пакетке салып қойып, содан кейін шығып кететін.
+  //    Нәтижесінде түрі жарияланбаған үш бөлік қалып, Word файлды
+  //    «бүлінген» деп санайтын.
+  let rels = entries.find((e) => e.name === "word/_rels/document.xml.rels");
+  if (!rels) {
+    rels = {
+      name: "word/_rels/document.xml.rels",
+      data: new TextEncoder().encode(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `</Relationships>`
+      ),
+    };
+    entries.push(rels);
+  }
+
+  // 3. Бөліктердің түрін жариялау. Бұл қадамсыз Word файлды ашпайды.
+  const ct = entries.find((e) => e.name === "[Content_Types].xml");
+  if (!ct) return;
+  let ctXml = decode(ct);
+  if (!/Extension="png"/i.test(ctXml)) {
+    ctXml = ctXml.replace(
+      /(<Types[^>]*>)/,
+      '$1<Default Extension="png" ContentType="image/png"/>'
+    );
+  }
+  if (!ctXml.includes('PartName="/word/ziro-header.xml"')) {
+    ctXml = ctXml.replace(
+      "</Types>",
+      '<Override PartName="/word/ziro-header.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
+        '<Override PartName="/word/ziro-footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
+        "</Types>"
+    );
+  }
+
+  // 4. Бәрі дайын — енді ғана пакетке жазамыз.
   const logoRelId = "rIdZiroLogo";
+  entries.push({ name: LOGO, data: logoBytes });
   entries.push({
     name: "word/_rels/ziro-header.xml.rels",
     data: new TextEncoder().encode(
@@ -130,13 +170,11 @@ async function addHeaderFooter(
 </Relationships>`
     ),
   });
-
   entries.push({ name: HDR, data: new TextEncoder().encode(headerXml(title, logoRelId)) });
   entries.push({ name: FTR, data: new TextEncoder().encode(footerXml()) });
 
-  // 3. Құжаттың сілтемелер тізіміне қосу.
-  const rels = entries.find((e) => e.name === "word/_rels/document.xml.rels");
-  if (!rels) return;
+  encodeInto(ct, ctXml);
+
   let relsXml = decode(rels);
   const n = nextRelId(relsXml);
   const hdrId = `rId${n}`;
@@ -149,41 +187,20 @@ async function addHeaderFooter(
   );
   encodeInto(rels, relsXml);
 
-  // 4. [Content_Types] — жаңа бөліктердің түрін жариялау.
-  const ct = entries.find((e) => e.name === "[Content_Types].xml");
-  if (ct) {
-    let ctXml = decode(ct);
-    if (!ctXml.includes('Extension="png"')) {
-      ctXml = ctXml.replace("<Types", '<Types').replace(
-        /(<Types[^>]*>)/,
-        '$1<Default Extension="png" ContentType="image/png"/>'
-      );
-    }
-    ctXml = ctXml.replace(
-      "</Types>",
-      '<Override PartName="/word/ziro-header.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
-        '<Override PartName="/word/ziro-footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
-        "</Types>"
-    );
-    encodeInto(ct, ctXml);
+  // 5. document.xml түбірі r кеңістігін жариялауы керек, әйтпесе
+  //    sectPr ішіндегі r:id-ді ешнәрсеге байлауға болмайды.
+  const root = doc.documentElement;
+  if (!root.getAttribute("xmlns:r")) {
+    root.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:r", R);
   }
 
-  // 5. sectPr — бетке қай колонтитул тиесілі екенін жазу.
-  //    Схема бойынша бұл жазбалар sectPr-дің ЕҢ БАСЫНДА тұруы керек.
-  let sectPr = Array.from(body.getElementsByTagNameNS(W, "sectPr")).pop() ?? null;
-  if (!sectPr) {
-    sectPr = doc.createElementNS(W, "w:sectPr");
-    body.appendChild(sectPr);
-  }
-  // Бастапқы файлдың колонтитулдары болса — оларды алып тастаймыз.
-  for (const tag of ["headerReference", "footerReference"]) {
-    for (const el of Array.from(sectPr.getElementsByTagNameNS(W, tag))) {
-      el.parentNode?.removeChild(el);
-    }
-  }
-  // titlePg болса, бірінші бет колонтитулсыз қалар еді — өшіреміз.
-  for (const el of Array.from(sectPr.getElementsByTagNameNS(W, "titlePg"))) {
-    el.parentNode?.removeChild(el);
+  // 6. sectPr: колонтитулға сілтемелер ең басында тұруы тиіс.
+  //    Барлық бөлімді өңдейміз — файлда бөлім үзілісі болуы мүмкін.
+  const sects = Array.from(body.getElementsByTagNameNS(W, "sectPr"));
+  if (sects.length === 0) {
+    const s = doc.createElementNS(W, "w:sectPr");
+    body.appendChild(s);
+    sects.push(s);
   }
 
   const mk = (tag: string, id: string) => {
@@ -192,8 +209,26 @@ async function addHeaderFooter(
     el.setAttributeNS(R, "r:id", id);
     return el;
   };
-  sectPr.insertBefore(mk("footerReference", ftrId), sectPr.firstChild);
-  sectPr.insertBefore(mk("headerReference", hdrId), sectPr.firstChild);
+
+  for (const sectPr of sects) {
+    for (const tag of ["headerReference", "footerReference", "titlePg"]) {
+      for (const el of Array.from(sectPr.getElementsByTagNameNS(W, tag))) {
+        el.parentNode?.removeChild(el);
+      }
+    }
+
+    // pgMar: header, footer, gutter схема бойынша міндетті. Оларсыз Word
+    // колонтитулды беттің шетінен қай қашықтықта басатынын білмейді.
+    const pgMar = sectPr.getElementsByTagNameNS(W, "pgMar")[0];
+    if (pgMar) {
+      for (const [name, val] of [["header", "709"], ["footer", "709"], ["gutter", "0"]]) {
+        if (!pgMar.getAttributeNS(W, name)) pgMar.setAttributeNS(W, `w:${name}`, val);
+      }
+    }
+
+    sectPr.insertBefore(mk("footerReference", ftrId), sectPr.firstChild);
+    sectPr.insertBefore(mk("headerReference", hdrId), sectPr.firstChild);
+  }
 }
 
 /**
@@ -340,6 +375,8 @@ function crc32(bytes: Uint8Array): number {
 }
 
 async function writeZip(entries: ZipEntry[]): Promise<Blob> {
+  // OPC пакетінде каталог жазбалары болмауы керек.
+  entries = entries.filter((e) => !e.name.endsWith("/"));
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
