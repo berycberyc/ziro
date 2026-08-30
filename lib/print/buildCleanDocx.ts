@@ -17,6 +17,8 @@
  *     сурет жоғалмас үшін көшіріледі
  */
 
+import { buildQuantityTable, type QRow } from "./quantityTable";
+
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const XML_SPACE = "http://www.w3.org/XML/1998/namespace";
@@ -514,6 +516,17 @@ export async function buildCleanDocx(
   const body = doc.getElementsByTagNameNS(W, "body")[0];
   if (!body) throw new Error("Құжаттың құрылымы танылмады.");
 
+  // Сандық сипаттама — бөлек жиналады: тізім емес, кесте керек.
+  // Файлда [A_баған] белгісі болса, сол пән деп танимыз.
+  const isQuantity = /\[\s*[ABab]_(баған|bagan)\s*\]/.test(
+    Array.from(body.getElementsByTagNameNS(W, "t"))
+      .map((t) => t.textContent ?? "")
+      .join("\n")
+  );
+  if (isQuantity) {
+    return buildQuantityDoc(entries, doc, body, lang, headerTitle);
+  }
+
   const keep: Element[] = [];
   let mode: "header" | "await" | "kk" | "ru" | "passage" = "header";
   let pendingNumber: string | null = null;
@@ -667,5 +680,91 @@ export async function buildCleanDocx(
   const out = new XMLSerializer().serializeToString(doc);
   docEntry.data = new TextEncoder().encode(out);
 
+  return writeZip(entries);
+}
+
+
+/**
+ * Сандық сипаттаманың баспа нұсқасы — кесте түрінде.
+ *
+ * Файлды сұрақтарға бөліп, әрқайсысынан үш бөлікті жинаймыз: шарт (болса),
+ * А бағаны, В бағаны. Содан кейін бәрін бір кестеге саламыз.
+ *
+ * Тілі бөлек: [kk] блогынан тек қазақшасы, [ru] блогынан тек орысшасы
+ * алынады — екеуі бір ұяшыққа қосылмайды.
+ */
+async function buildQuantityDoc(
+  entries: ZipEntry[],
+  doc: Document,
+  body: Element,
+  lang: "kk" | "ru",
+  headerTitle?: string
+): Promise<Blob> {
+  const rows: QRow[] = [];
+  let cur: QRow | null = null;
+  let mode: "header" | "await" | "kk" | "ru" = "header";
+  /** Қай бөлікке жазып отырмыз: шарт, А немесе В. */
+  let slot: "condition" | "a" | "b" = "condition";
+
+  const flush = () => {
+    if (cur) rows.push(cur);
+    cur = null;
+  };
+
+  for (const el of Array.from(body.children)) {
+    if (el.localName !== "p") continue;
+
+    const text = paragraphText(el);
+    const m = text.match(TAG_RE);
+    const key = m ? m[1].trim().toLowerCase() : null;
+
+    if (key) {
+      if (/^question\s*\d+$/.test(key)) {
+        flush();
+        cur = { number: `${key.match(/\d+/)![0]}.`, condition: [], colA: [], colB: [] };
+        mode = "await";
+        slot = "condition";
+        continue;
+      }
+      if (["kk", "қаз", "каз"].includes(key)) { mode = "kk"; slot = "condition"; continue; }
+      if (["ru", "рус"].includes(key)) { mode = "ru"; slot = "condition"; continue; }
+      if (/^[ab]_(баған|bagan)$/.test(key)) {
+        if (mode !== lang) continue;
+        slot = key.startsWith("a") ? "a" : "b";
+        // Белгіні алып тастап, қалғанын сол ұяшыққа саламыз.
+        stripTagPrefix(el, "");
+        if (paragraphText(el) || hasImage(el) || hasMath(el)) {
+          (slot === "a" ? cur!.colA : cur!.colB).push(el);
+        }
+        continue;
+      }
+      // Қалған белгілер — тақырып, дұрыс жауап, сессия аты — керек емес.
+      continue;
+    }
+
+    if (mode !== lang || !cur) continue;
+    if (isPageBreakOnly(el)) continue;
+    if (!paragraphText(el) && !hasImage(el) && !hasMath(el)) continue;
+
+    // Белгіден кейінгі жалғасы: сурет немесе қосымша жол сол ұяшыққа.
+    if (slot === "a") cur.colA.push(el);
+    else if (slot === "b") cur.colB.push(el);
+    else cur.condition.push(el);
+  }
+  flush();
+
+  const table = buildQuantityTable(doc, rows, lang);
+
+  const sect = Array.from(body.children).filter((c) => c.localName === "sectPr");
+  while (body.firstChild) body.removeChild(body.firstChild);
+  body.appendChild(table);
+  // Кестеден кейін бос абзац керек — Word талабы.
+  body.appendChild(doc.createElementNS(W, "w:p"));
+  for (const sp of sect) body.appendChild(sp);
+
+  if (headerTitle) await addHeaderFooter(entries, doc, body, headerTitle);
+
+  const docEntry = entries.find((e) => e.name === "word/document.xml")!;
+  docEntry.data = new TextEncoder().encode(new XMLSerializer().serializeToString(doc));
   return writeZip(entries);
 }
