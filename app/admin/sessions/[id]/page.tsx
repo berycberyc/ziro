@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { removeStoredFiles } from "@/lib/storageCleanup";
 import { fetchAll } from "@/lib/fetchAll";
 
 type Registration = {
@@ -79,6 +80,9 @@ function addMinutes(hhmm: string, minutes: number) {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/** Өшіруді растау үшін жазылатын сөз. Кездейсоқ басып қалудан қорғайды. */
+const DELETE_WORD = "ӨШІРУ";
+
 export default function AdminSessionDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -90,6 +94,11 @@ export default function AdminSessionDetailPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<SessionInfo>>({});
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteCounts, setDeleteCounts] = useState<{
+    regs: number; questions: number; pdfs: number; attempts: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const { data: sessionData } = await supabase
@@ -177,13 +186,71 @@ export default function AdminSessionDetailPage() {
     load();
   }
 
+  /**
+   * Сессияны өшіру.
+   *
+   * Дерекқордағы жазбалар «cascade» арқылы өзі жойылады, ал ҚОЙМАДАҒЫ
+   * файлдар — жоқ. Сондықтан алдымен сілтемелерді жинап, файлдарды
+   * өшіреміз, содан кейін ғана сессияны жоямыз: кері ретте сілтемелер
+   * жоғалып, файлдарды табу мүмкін болмай қалар еді.
+   */
+  /** Не өшірілетінін алдын ала санап, көрсетеміз. */
+  async function prepareDelete() {
+    setConfirmingDelete(true);
+    setDeleteConfirmText("");
+    const [regs, qs, pdfs] = await Promise.all([
+      supabase.from("registrations").select("id", { count: "exact", head: true })
+        .eq("test_session_id", sessionId),
+      supabase.from("questions").select("id", { count: "exact", head: true })
+        .eq("session_id", sessionId),
+      supabase.from("print_files").select("id", { count: "exact", head: true })
+        .eq("test_session_id", sessionId),
+    ]);
+    setDeleteCounts({
+      regs: regs.count ?? 0,
+      questions: qs.count ?? 0,
+      pdfs: pdfs.count ?? 0,
+      attempts: 0,
+    });
+  }
+
   async function handleDeleteSession() {
-    const { error } = await supabase.from("test_sessions").delete().eq("id", sessionId);
-    if (error) {
-      alert("Өшірілмеді: " + error.message);
-      return;
+    if (deleteConfirmText.trim() !== DELETE_WORD) return;
+    setDeleting(true);
+    try {
+      const [{ data: qs }, { data: pdfs }, { data: regs }] = await Promise.all([
+        supabase.from("questions").select("image_url, image_url_ru").eq("session_id", sessionId),
+        supabase.from("print_files").select("file_url").eq("test_session_id", sessionId),
+        supabase.from("registrations").select("receipt_url").eq("test_session_id", sessionId),
+      ]);
+
+      await removeStoredFiles(
+        "question-images",
+        (qs ?? []).flatMap((q: any) => [q.image_url, q.image_url_ru])
+      );
+      await removeStoredFiles("print-files", (pdfs ?? []).map((p: any) => p.file_url));
+
+      // Түбіртектер жолмен сақталады (057 миграциясынан кейін), сілтемемен емес.
+      const receiptPaths = (regs ?? [])
+        .map((r: any) => r.receipt_url)
+        .filter((u: string | null): u is string => !!u && !u.startsWith("http"));
+      if (receiptPaths.length > 0) {
+        try {
+          await supabase.storage.from("receipts").remove(receiptPaths);
+        } catch (err) {
+          console.warn("Түбіртектер өшірілмеді:", err);
+        }
+      }
+
+      const { error } = await supabase.from("test_sessions").delete().eq("id", sessionId);
+      if (error) {
+        alert("Өшірілмеді: " + error.message);
+        return;
+      }
+      router.push("/admin/sessions");
+    } finally {
+      setDeleting(false);
     }
-    router.push("/admin/sessions");
   }
 
   async function markPaid(regId: string) {
@@ -216,7 +283,7 @@ export default function AdminSessionDetailPage() {
             {editing ? "Жабу" : "Өзгерту"}
           </button>
           <button
-            onClick={() => setConfirmingDelete(true)}
+            onClick={prepareDelete}
             className="focus-ring rounded-full border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
           >
             Өшіру
@@ -246,19 +313,37 @@ export default function AdminSessionDetailPage() {
       )}
 
       {confirmingDelete && (
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3">
-          <span className="text-sm text-red-700">
-            Сессияны өшіру керек пе? Барлық брондаулар да жойылады. Бұл әрекетті қайтару мүмкін емес.
-          </span>
-          <div className="flex gap-2">
+        <div className="mt-4 rounded-xl border border-red-300 bg-red-50 px-5 py-4">
+          <p className="text-sm font-semibold text-red-700">
+            Сессияны өшіру — қайтарылмайтын әрекет.
+          </p>
+          {deleteCounts && (
+            <ul className="mt-2 space-y-1 text-sm text-red-700/90">
+              <li>• Брондаулар: {deleteCounts.regs} — оқушылардың жауаптары мен нәтижелерімен бірге</li>
+              <li>• Сұрақтар: {deleteCounts.questions} — суреттерімен бірге</li>
+              <li>• Басып шығару файлдары: {deleteCounts.pdfs}</li>
+              <li>• Осы сессияға жүктелген барлық түбіртектер</li>
+            </ul>
+          )}
+          <p className="mt-3 text-sm text-red-700">
+            Растау үшін төмендегі жолаққа <b>{DELETE_WORD}</b> деп жазыңыз.
+          </p>
+          <input
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder={DELETE_WORD}
+            className="focus-ring mt-2 w-48 rounded-xl border border-red-300 bg-white px-4 py-2 text-sm"
+          />
+          <div className="mt-3 flex gap-2">
             <button
               onClick={handleDeleteSession}
-              className="focus-ring rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+              disabled={deleteConfirmText.trim() !== DELETE_WORD || deleting}
+              className="focus-ring rounded-full bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-40 disabled:hover:bg-red-600"
             >
-              Иә, өшіру
+              {deleting ? "Өшірілуде..." : "Иә, өшіру"}
             </button>
             <button
-              onClick={() => setConfirmingDelete(false)}
+              onClick={() => { setConfirmingDelete(false); setDeleteConfirmText(""); }}
               className="focus-ring rounded-full border border-ink/15 px-4 py-1.5 text-xs font-semibold text-ink hover:bg-white"
             >
               Бас тарту
