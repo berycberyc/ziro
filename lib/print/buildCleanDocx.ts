@@ -567,6 +567,14 @@ export async function buildCleanDocx(
   const keep: Element[] = [];
   let mode: "header" | "await" | "kk" | "ru" | "passage" = "header";
   let pendingNumber: string | null = null;
+  // Оқылым мәтінінің ішінде тұрмыз ба.
+  //
+  // Неге керек: блок келесі сұрақ басталғанша созылады, ал мәтіннің
+  // абзацтары сұрақтың басы болып саналмайтын. Сондықтан бүкіл мәтін
+  // алдындағы сұрақтың блогына жабысып, Word оларды бір бүтін ретінде
+  // тасымалдайтын: беттің төменінде орын болса да, сұрақ мәтінмен бірге
+  // келесі бетке кетіп қалатын.
+  let inPassage = false;
   /** Сұрақ басталатын абзацтар — блокты бөлу үшін. */
   const questionStarts = new Set<Element>();
   // Суреттер екі тілде де болуы мүмкін: [kk] блогында қазақшасы, [ru]
@@ -636,8 +644,10 @@ export async function buildCleanDocx(
       }
       if (/^(мәтін|матин|текст|passage)\s*\d+$/.test(key)) {
         stripTagPrefix(el, "");
+        questionStarts.add(el);
         keep.push(el);
         mode = "passage";
+        inPassage = true;
         continue;
       }
       // Танылмаған, бірақ жалғыз тұрған белгі — сессия аты, пән аты.
@@ -695,7 +705,12 @@ export async function buildCleanDocx(
         questionStarts.add(el);
       }
       pendingNumber = null;
+      inPassage = false;
     }
+
+    // Мәтіннің әр абзацы — өз алдына блок. Сонда мәтін бетке еркін
+    // сыяды, ал абзацтың өзі қақ бөлінбейді (keepLines бәрібір қойылады).
+    if (inPassage && !isQuestionStart) questionStarts.add(el);
 
     if (elHasImage) keptImageInQuestion = true;
     keep.push(el);
