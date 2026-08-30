@@ -27,17 +27,22 @@ comment on column questions.image_url_ru is
 
 -- Оқушы сұрақтарды questions_public көрінісі арқылы оқиды — оған да жаңа
 -- баған қосылуы керек, әйтпесе тест экраны орысша суретті көрмейді.
--- Көріністің қалған бөлігі өзгеріссіз: дұрыс жауап бұрынғыдай жасырын.
+--
+-- МАҢЫЗДЫ: жаңа баған тізімнің ЕҢ СОҢЫНА қосылады. Postgres «create or
+-- replace view» кезінде бағанды ортаға қоюға рұқсат бермейді — тек соңына.
+-- Әйтпесе көріністі өшіріп қайта жасауға тура келер еді, ал оған басқа
+-- нәрселер сүйеніп тұруы мүмкін. Бағандардың реті кодқа әсер етпейді:
+-- бәрі атымен оқылады.
 create or replace view questions_public as
 select
   q.id, q.session_id, q.subject, q.variant_number, q.question_number,
-  q.topic_id, q.passage_id, q.text_kk, q.text_ru,
-  q.image_url, q.image_url_ru, q.answer_format,
+  q.topic_id, q.passage_id, q.text_kk, q.text_ru, q.image_url, q.answer_format,
   (
     select jsonb_agg(jsonb_build_object('text_kk', c->>'text_kk', 'text_ru', c->>'text_ru') order by ord)
     from jsonb_array_elements(q.choices) with ordinality as arr(c, ord)
   ) as choices,
-  q.column_a_kk, q.column_a_ru, q.column_b_kk, q.column_b_ru
+  q.column_a_kk, q.column_a_ru, q.column_b_kk, q.column_b_ru,
+  q.image_url_ru
 from questions q;
 
 grant select on questions_public to anon, authenticated;

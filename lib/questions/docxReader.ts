@@ -90,9 +90,19 @@ function firstKid(el: Element | null, name: string): Element | null {
 }
 
 /** LaTeX-те бір таңбадан ұзын өрнек жақшаны талап етеді. */
-function wrap(s: string) {
+/**
+ * LaTeX аргументін жақшаға алады.
+ *
+ * Бір таңбалы аргументті жақшасыз қалдыруға тек ДӘРЕЖЕ мен ИНДЕКС үшін
+ * болады: «x^2» дұрыс оқылады. Ал \frac, \overline, \sqrt сияқты
+ * командаларда жақша әрқашан керек — әйтпесе «\frac» + «m» + «n» деген
+ * «\fracmn» болып жабысып, KaTeX оны команда деп танымай, қызыл қатемен
+ * шығарады. Дәл сол себепті алдын ала қарау экранында «\fracmn» көрінген.
+ */
+function wrap(s: string, alwaysBraces = false) {
   const t = s.trim();
-  if (t.length === 1 || (t.startsWith("{") && t.endsWith("}"))) return t;
+  if (t.startsWith("{") && t.endsWith("}")) return t;
+  if (!alwaysBraces && t.length === 1) return t;
   return `{${t}}`;
 }
 
@@ -111,7 +121,11 @@ function conv(el: Element): string {
     case "r":
       return kids(el, "t").map((t) => t.textContent ?? "").join("");
     case "f":
-      return "\\frac" + wrap(convSeq(firstKid(el, "num"))) + wrap(convSeq(firstKid(el, "den")));
+      return (
+        "\\frac" +
+        wrap(convSeq(firstKid(el, "num")), true) +
+        wrap(convSeq(firstKid(el, "den")), true)
+      );
     case "sSup":
       return convSeq(firstKid(el, "e")) + "^" + wrap(convSeq(firstKid(el, "sup")));
     case "sSub":
@@ -124,7 +138,7 @@ function conv(el: Element): string {
       );
     case "rad": {
       const deg = convSeq(firstKid(el, "deg")).trim();
-      const base = wrap(convSeq(firstKid(el, "e")));
+      const base = wrap(convSeq(firstKid(el, "e")), true);
       return (deg ? `\\sqrt[${deg}]` : "\\sqrt") + base;
     }
     case "d": {
@@ -151,9 +165,28 @@ function conv(el: Element): string {
     case "func":
       return convSeq(firstKid(el, "fName")) + " " + convSeq(firstKid(el, "e"));
     case "bar":
-      return "\\overline" + wrap(convSeq(firstKid(el, "e")));
-    case "acc":
-      return "\\hat" + wrap(convSeq(firstKid(el, "e")));
+      return "\\overline" + wrap(convSeq(firstKid(el, "e")), true);
+    case "acc": {
+      // Word-та үстіңгі сызықты екі жолмен қоюға болады:
+      //   «Черты сверху и снизу» → m:bar (жоғарыда өңделеді);
+      //   «Диакритические знаки» → m:acc, яғни «үстіне таңба қою».
+      // Екіншісінде таңбаның өзін қарау керек: сызықша болса — сызық,
+      // үйшік болса — үйшік. Бұрын бәрі үйшік (\hat) болып шығатын,
+      // сондықтан «416x» деген сан «41ˆ6x» болып көрінген.
+      const chr =
+        firstKid(firstKid(el, "accPr"), "chr")?.getAttributeNS(M_NS, "val") ?? "\u0302";
+      const cmd =
+        chr === "\u0304" || chr === "\u0305" || chr === "‾" || chr === "¯"
+          ? "\\overline"
+          : chr === "\u20d7" || chr === "→"
+          ? "\\vec"
+          : chr === "\u0303" || chr === "~"
+          ? "\\tilde"
+          : chr === "\u0307" || chr === "˙"
+          ? "\\dot"
+          : "\\hat";
+      return cmd + wrap(convSeq(firstKid(el, "e")), true);
+    }
     default:
       // Белгісіз элемент — ішіндегі мәтін жоғалмауы керек.
       return convSeq(el);
