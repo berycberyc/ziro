@@ -238,7 +238,10 @@ export default function ImportQuestionsPage() {
         // көрсетеді. Сол себепті бірдей суретті екі рет қоюдың қажеті жоқ.
         image_url_ru: q.image_index_ru !== null ? imageUrls.get(q.image_index_ru) ?? null : null,
         answer_format: isQuantity ? "quantity" : isNumeric ? "numeric" : "abcd",
-        choices: isQuantity || isNumeric ? null : q.choices,
+        // Сандық пен РФМШ-та жауап нұсқалары жоқ, бірақ бағанда «not null»
+        // шектеуі тұр (әдепкісі — бос тізім). Сондықтан null емес, бос
+        // тізім жазамыз, әйтпесе дерекқор жазбаны қабылдамайды.
+        choices: isQuantity || isNumeric ? [] : q.choices,
         correct_answer: isQuantity || isNumeric ? q.correct_answer : null,
         column_a_kk: q.column_a_kk || null,
         column_a_ru: q.column_a_ru || q.column_a_kk || null,
