@@ -24,6 +24,7 @@ type QuestionPublic = {
   text_kk: string | null;
   text_ru: string | null;
   image_url: string | null;
+  image_url_ru: string | null;
   answer_format: "abcd" | "numeric" | "quantity";
   choices: { text_kk: string; text_ru: string }[];
   column_a_kk: string | null;
@@ -213,7 +214,7 @@ export default function TestTakingPage() {
       const { data, error } = await supabase
         .from("questions_public")
         .select(
-          "id, question_number, text_kk, text_ru, image_url, answer_format, choices, column_a_kk, column_a_ru, column_b_kk, column_b_ru, passage_id"
+          "id, question_number, text_kk, text_ru, image_url, image_url_ru, answer_format, choices, column_a_kk, column_a_ru, column_b_kk, column_b_ru, passage_id"
         )
         .eq("session_id", sid)
         .eq("subject", subject)
@@ -815,7 +816,12 @@ export default function TestTakingPage() {
         <p className="whitespace-pre-line font-medium text-ink">
           {q.question_number}. <MathText text={qText(q)} />
         </p>
-        {q.image_url && <img src={q.image_url} alt="" className="my-3 max-w-xs" />}
+        {(() => {
+          // Суреттегі жазулар аударылмайды, сондықтан әр тілдің өз суреті бар.
+          // Орысшасы қойылмаса — қазақшасын көрсетеміз (таза сызба жағдайы).
+          const src = lang === "ru" ? q.image_url_ru || q.image_url : q.image_url;
+          return src ? <img src={src} alt="" className="my-3 max-w-xs" /> : null;
+        })()}
 
         {q.answer_format === "numeric" && (
           <input

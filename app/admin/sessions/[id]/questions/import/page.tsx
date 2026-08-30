@@ -186,18 +186,24 @@ export default function ImportQuestionsPage() {
       }
 
       // Суреттерді қоймаға жүктеп, әр сұраққа сілтеме дайындаймыз.
+      // Бір сұрақта екі сурет болуы мүмкін: [kk] блогындағысы қазақшаға,
+      // [ru] блогындағысы орысшаға. Әр суретті бір рет қана жүктейміз.
       const imageUrls = new Map<number, string>();
-      for (const q of parsed.questions) {
-        if (q.image_index === null) continue;
-        const img = images.get(q.image_index);
-        if (!img) continue;
-        const path = `${sessionId}/${subject}/${variant}/${q.question_number}-${Date.now()}.${img.ext}`;
+      const uploadImage = async (idx: number | null, qNumber: number) => {
+        if (idx === null || imageUrls.has(idx)) return;
+        const img = images.get(idx);
+        if (!img) return;
+        const path = `${sessionId}/${subject}/${variant}/${qNumber}-${idx}-${Date.now()}.${img.ext}`;
         const { error: upErr } = await supabase.storage
           .from("question-images")
           .upload(path, img.blob, { contentType: img.blob.type });
         if (upErr) throw upErr;
         const { data } = supabase.storage.from("question-images").getPublicUrl(path);
-        imageUrls.set(q.image_index, data.publicUrl);
+        imageUrls.set(idx, data.publicUrl);
+      };
+      for (const q of parsed.questions) {
+        await uploadImage(q.image_index, q.question_number);
+        await uploadImage(q.image_index_ru, q.question_number);
       }
 
       const isQuantity = QUANTITY_SUBJECTS.includes(subject);
@@ -213,6 +219,9 @@ export default function ImportQuestionsPage() {
         text_kk: q.text_kk,
         text_ru: q.text_ru || q.text_kk,
         image_url: q.image_index !== null ? imageUrls.get(q.image_index) ?? null : null,
+        // Орысша суреті болмаса — бос қалады, тест экраны сонда қазақшасын
+        // көрсетеді. Сол себепті бірдей суретті екі рет қоюдың қажеті жоқ.
+        image_url_ru: q.image_index_ru !== null ? imageUrls.get(q.image_index_ru) ?? null : null,
         answer_format: isQuantity ? "quantity" : isNumeric ? "numeric" : "abcd",
         choices: isQuantity || isNumeric ? null : q.choices,
         correct_answer: isQuantity || isNumeric ? q.correct_answer : null,
@@ -452,7 +461,14 @@ export default function ImportQuestionsPage() {
                 <b className={parsed.variant ? "" : "text-red-600"}>{parsed.variant ?? "жоқ"}</b>
               </p>
               <p>Сұрақ саны: {parsed.questions.length}</p>
-              <p>Суреті бар сұрақ: {parsed.questions.filter((q) => q.image_index !== null).length}</p>
+              <p>
+                Суреті бар сұрақ:{" "}
+                {parsed.questions.filter((q) => q.image_index !== null || q.image_index_ru !== null).length}
+                {parsed.questions.some((q) => q.image_index_ru !== null) && (
+                  <> (оның {parsed.questions.filter((q) => q.image_index_ru !== null).length}-інде
+                  орысша суреті бөлек)</>
+                )}
+              </p>
               {PASSAGE_SUBJECTS.includes(subject) && <p>Мәтін саны: {parsed.passages.length}</p>}
             </div>
 

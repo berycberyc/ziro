@@ -519,10 +519,14 @@ export async function buildCleanDocx(
   let pendingNumber: string | null = null;
   /** Сұрақ басталатын абзацтар — блокты бөлу үшін. */
   const questionStarts = new Set<Element>();
-  // Басқа тілдегі блоктағы суреттер: жоғалмауы үшін сақтап, осы тілдегі
-  // сұрақтың мәтінінен КЕЙІН қоямыз. Бұрын кезектің соңына түсіп, келесі
-  // сұрақтың алдында тұрып қалатын.
-  let pendingImages: Element[] = [];
+  // Суреттер екі тілде де болуы мүмкін: [kk] блогында қазақшасы, [ru]
+  // блогында орысшасы — өйткені суреттегі жазулар аударылмайды.
+  //
+  // Ереже: осы тілдің өз суреті болса, соны ғана аламыз. Болмаса — басқа
+  // тілдегісін аламыз (таза сызба, жазуы жоқ жағдай). Бұрын басқа тілдегі
+  // сурет әрқашан қосылатын, сондықтан екі суреті бар сұрақта екеуі де
+  // бір параққа түсіп қалатын.
+  let otherLangImages: Element[] = [];
   let keptImageInQuestion = false;
 
   for (const el of Array.from(body.children)) {
@@ -538,8 +542,8 @@ export async function buildCleanDocx(
     if (key) {
       if (/^question\s*\d+$/.test(key)) {
         // Сұрақ мәтіні табылмай қалса да сурет жоғалмасын.
-        if (pendingImages.length > 0 && !keptImageInQuestion) keep.push(...pendingImages);
-        pendingImages = [];
+        if (otherLangImages.length > 0 && !keptImageInQuestion) keep.push(...otherLangImages);
+        otherLangImages = [];
         keptImageInQuestion = false;
         pendingNumber = `${key.match(/\d+/)![0]}. `;
         mode = "await";
@@ -580,7 +584,9 @@ export async function buildCleanDocx(
     }
 
     if ((mode === "kk" || mode === "ru") && mode !== lang) {
-      if (hasImage(el)) pendingImages.push(el);
+      // Басқа тілдің суретін бірден қоспаймыз — өз тілімізде суреті бар-жоғы
+      // белгісіз. Сұрақ біткенде ғана шешеміз.
+      if (hasImage(el)) otherLangImages.push(el);
       continue;
     }
     if (mode === "header") continue;
@@ -632,15 +638,12 @@ export async function buildCleanDocx(
     if (elHasImage) keptImageInQuestion = true;
     keep.push(el);
 
-    // Сұрақтың мәтінінен кейін — сол сұрақтың суреті.
-    if (isQuestionStart && pendingImages.length > 0) {
-      keep.push(...pendingImages);
-      pendingImages = [];
-      keptImageInQuestion = true;
-    }
+    // Өз тілінде суреті болса, басқа тілдегісі керек емес.
+    if (keptImageInQuestion) otherLangImages = [];
   }
 
-  if (pendingImages.length > 0 && !keptImageInQuestion) keep.push(...pendingImages);
+  // Соңғы сұрақ: өз тілінде суреті болмаса, басқа тілдегісін қосамыз.
+  if (otherLangImages.length > 0 && !keptImageInQuestion) keep.push(...otherLangImages);
 
   keepBlocksTogether(doc, keep, questionStarts);
 

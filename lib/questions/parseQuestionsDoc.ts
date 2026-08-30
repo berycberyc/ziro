@@ -33,8 +33,19 @@ export type ParsedChoice = { text_kk: string; text_ru: string; correct: boolean 
 export type ParsedQuestion = {
   question_number: number;
   topic: string | null;
-  /** Word-тағы суреттің нөмірі (docxToContent берген). Бір сұраққа бір сурет. */
-  image_index: number | null;
+  /**
+   * Word-тағы суреттің нөмірі (docxToContent берген).
+   *
+   * Сурет қай тіл блогында тұрса, сол тілге тиесілі: [kk] ішіндегісі —
+   * қазақшаға, [ru] ішіндегісі — орысшаға. Суреттердегі жазулар (мысалы
+   * «А бағаны», «Ұзындығы») аударылмайды, сондықтан әр тілге өз суреті
+   * керек болады.
+   *
+   * Бір ғана сурет болса, ол екі тілге де қолданылады — таза геометриялық
+   * сызбаны екі рет қоюдың қажеті жоқ.
+   */
+  image_index: number | null;      // қазақшаға
+  image_index_ru: number | null;   // орысшаға
   text_kk: string;
   text_ru: string;
   choices: ParsedChoice[];
@@ -132,11 +143,17 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
     if (img) {
       const idx = Number(img[1]);
       if (current) {
-        if (current.image_index === null) {
-          current.image_index = idx;
+        // Суретті тұрған тіл блогына тіркейміз.
+        const toRu = lang === "ru" && !isMono;
+        if (toRu) {
+          if (current.image_index_ru === null) current.image_index_ru = idx;
+          else warnings.push(
+            `${current.question_number}-сұрақтың [ru] блогында бірнеше сурет бар — біріншісі алынды.`
+          );
         } else {
-          warnings.push(
-            `${current.question_number}-сұрақта бірнеше сурет бар — біріншісі ғана алынды.`
+          if (current.image_index === null) current.image_index = idx;
+          else warnings.push(
+            `${current.question_number}-сұрақтың [kk] блогында бірнеше сурет бар — біріншісі алынды.`
           );
         }
       } else if (collectingPassage) {
@@ -184,6 +201,7 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
         question_number: qn,
         topic: null,
         image_index: null,
+        image_index_ru: null,
         text_kk: "",
         text_ru: "",
         choices: [],
