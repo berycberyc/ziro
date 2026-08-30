@@ -568,7 +568,19 @@ export async function buildCleanDocx(
       }
       if (/^[ab]_(баған|bagan)$/.test(key)) {
         if ((mode === "kk" || mode === "ru") && mode !== lang) continue;
-        stripTagPrefix(el, key[0].toUpperCase() + ") ");
+        // Сандықта сұрақтың жеке мәтіні жоқ: [question12]-ден кейін бірден
+        // бағандар келеді. Сондықтан нөмір А бағанының алдына қойылады —
+        // әйтпесе қоятын жер табылмай, барлық сұрақ нөмірсіз шығатын.
+        const isFirstColumn = key.startsWith("a");
+        stripTagPrefix(
+          el,
+          (pendingNumber && isFirstColumn ? pendingNumber : "") +
+            key[0].toUpperCase() + ") "
+        );
+        if (pendingNumber && isFirstColumn) {
+          questionStarts.add(el);
+          pendingNumber = null;
+        }
         keep.push(el);
         continue;
       }
