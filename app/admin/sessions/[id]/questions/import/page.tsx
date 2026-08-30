@@ -20,6 +20,7 @@ import {
 } from "@/lib/questions/subjects";
 import MathText from "@/components/MathText";
 import { buildCleanDocx } from "@/lib/print/buildCleanDocx";
+import { removeStoredFile, removeStoredFiles } from "@/lib/storageCleanup";
 import { TEST_SUBJECT_LABELS } from "@/lib/i18n-test";
 import { MONOLINGUAL_SUBJECTS } from "@/lib/questions/subjects";
 
@@ -151,6 +152,20 @@ export default function ImportQuestionsPage() {
     try {
       const variant = parsed.variant;
 
+      // Ескі сұрақтардың суреттерін есте сақтаймыз: жаңа сұрақтар сәтті
+      // жазылғаннан кейін қоймадан өшіреміз. Бұрын олар қоймада мәңгі
+      // қалып, әр қайта жүктеу сайын жаңа жинақ қосыла беретін.
+      const { data: oldQuestions } = await supabase
+        .from("questions")
+        .select("image_url, image_url_ru")
+        .eq("session_id", sessionId)
+        .eq("subject", subject)
+        .eq("variant_number", variant);
+      const oldImageUrls = (oldQuestions ?? []).flatMap((q: any) => [
+        q.image_url,
+        q.image_url_ru,
+      ]);
+
       // Осы нұсқаның ескі сұрақтарын алдымен өшіреміз — араласып кетпеуі үшін.
       await supabase
         .from("questions")
@@ -236,6 +251,11 @@ export default function ImportQuestionsPage() {
         if (qErr) throw qErr;
       }
 
+      // Жаңа сұрақтар сәтті жазылды — енді ескі суреттерді қоймадан
+      // өшіруге болады. Дәл осы кезекте: жазу сәтсіз болса, ескі
+      // суреттер орнында қалады.
+      await removeStoredFiles("question-images", oldImageUrls);
+
       setMessage(
         `${SUBJECT_LABELS[subject]}, ${variant}-нұсқа: ${rows.length} сұрақ жүктелді.` +
           (parsed.passages.length > 0 ? ` Мәтін саны: ${parsed.passages.length}.` : "")
@@ -305,6 +325,9 @@ export default function ImportQuestionsPage() {
 
       const { data: pub } = supabase.storage.from("print-files").getPublicUrl(path);
 
+      // Ауыстырудан бұрынғы PDF-тің сілтемесін есте сақтаймыз.
+      const previousUrl = printFiles[lang]?.url ?? null;
+
       const { error: dbErr } = await supabase.from("print_files").upsert(
         {
           test_session_id: sessionId,
@@ -317,6 +340,11 @@ export default function ImportQuestionsPage() {
         { onConflict: "test_session_id,subject,variant_number,lang" }
       );
       if (dbErr) throw dbErr;
+
+      // Жаңасы дерекқорға жазылды — ескісін қоймадан өшіреміз.
+      if (previousUrl && previousUrl !== pub.publicUrl) {
+        await removeStoredFile("print-files", previousUrl);
+      }
 
       await loadPrintFiles(printVariant);
       setMessage("PDF жүктелді.");

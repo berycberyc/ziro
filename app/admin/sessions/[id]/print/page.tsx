@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { removeStoredFiles } from "@/lib/storageCleanup";
 import { fetchAll, fetchAllByIds } from "@/lib/fetchAll";
 import {
   SUBJECT_LABELS,
@@ -243,7 +244,15 @@ export default function PrintRoomsPage() {
   async function handleClearPdfs() {
     setBusy("clear");
     try {
+      // Алдымен сілтемелерді жинап аламыз — жазбалар өшкен соң оларды
+      // табу мүмкін болмайды, ал файлдар қоймада қалып қояр еді.
+      const { data: files } = await supabase
+        .from("print_files")
+        .select("file_url")
+        .eq("test_session_id", sessionId);
+
       await supabase.from("print_files").delete().eq("test_session_id", sessionId);
+      await removeStoredFiles("print-files", (files ?? []).map((f: any) => f.file_url));
       await load();
     } finally {
       setBusy("");

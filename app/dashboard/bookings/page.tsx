@@ -277,6 +277,17 @@ export default function BookingsPage() {
         .eq("id", registrationId);
       if (updateError) throw updateError;
 
+      // Ескі түбіртекті қоймадан өшіреміз: ол енді ешқайда сілтелмейді,
+      // әрі онда ата-ананың аты мен телефонының бөлігі болады.
+      const previousPath = bookings.find((b) => b.id === registrationId)?.receipt_url ?? null;
+      if (previousPath && previousPath !== path && !previousPath.startsWith("http")) {
+        try {
+          await supabase.storage.from("receipts").remove([previousPath]);
+        } catch (err) {
+          console.warn("Ескі түбіртек өшірілмеді:", err);
+        }
+      }
+
       setBookings((prev) =>
         prev.map((b) => (b.id === registrationId ? { ...b, receipt_url: path } : b))
       );

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { removeStoredFile } from "@/lib/storageCleanup";
 import { SUBJECT_MAX_COUNT, SUBJECT_LABELS, QUANTITY_CHOICE_LABELS, type SubjectKey } from "@/lib/questions/subjects";
 
 type Topic = { id: string; name_kk: string; name_ru: string };
@@ -121,6 +122,9 @@ export default function QuantityQuestionEntryPage() {
     setError("");
     const ext = file.name.split(".").pop();
     const path = `${sessionId}/${subject}/${variant}/${questionNumber}-${Date.now()}.${ext}`;
+    // Ауыстырудан бұрынғы сурет — жаңасы сәтті жүктелген соң өшіріледі.
+    const previousUrl = conditionImageUrl;
+
     const { error: uploadErr } = await supabase.storage.from("question-images").upload(path, file);
     if (uploadErr) {
       setError("Сурет жүктелмеді: " + uploadErr.message);
@@ -129,6 +133,9 @@ export default function QuantityQuestionEntryPage() {
     }
     const { data } = supabase.storage.from("question-images").getPublicUrl(path);
     setConditionImageUrl(data.publicUrl);
+    if (previousUrl && previousUrl !== data.publicUrl) {
+      await removeStoredFile("question-images", previousUrl);
+    }
     setUploading(false);
   }
 
