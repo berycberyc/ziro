@@ -247,7 +247,12 @@ async function addHeaderFooter(
  * бүкіл құжат бір бетке тартылып кетер еді. keepLines болса әр абзацқа
  * қойылады — ол көршісіне әсер етпейді.
  */
-function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>): void {
+function keepBlocksTogether(
+  doc: Document,
+  keep: Element[],
+  starts: Set<Element>,
+  spaceStarts: Set<Element>
+): void {
   const blocks: Element[][] = [];
   let cur: Element[] = [];
   for (const el of keep) {
@@ -299,7 +304,14 @@ function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>
     // Бос жол бет ауысқанда жоғарыда жалғыз қалып қоюы мүмкін, ал
     // аралық олай істемейді: ол жай ғана сұрақты жоғарғысынан
     // алыстатады. Бірінші сұраққа қойылмайды — беттің басында керегі жоқ.
-    if (b > 0) setSpaceBefore(doc, block[0], 240); // 240 = 12 пункт
+    // Аралық блоктың басына емес, аралық керек әр абзацқа қойылады:
+    // мәтінге тиесілі сұрақтар бір блоктың ішінде тұрса да, бір-бірінен
+    // алшақ болуы тиіс. Бірінші абзацқа қойылмайды — беттің басында
+    // керегі жоқ.
+    for (let i = 0; i <= last; i++) {
+      if (b === 0 && i === 0) continue;
+      if (spaceStarts.has(block[i])) setSpaceBefore(doc, block[i], 240); // 12 пункт
+    }
   }
 }
 
@@ -567,8 +579,29 @@ export async function buildCleanDocx(
   const keep: Element[] = [];
   let mode: "header" | "await" | "kk" | "ru" | "passage" = "header";
   let pendingNumber: string | null = null;
+  // Оқылым мәтінінің ішінде тұрмыз ба.
+  //
+  // Неге керек: блок келесі сұрақ басталғанша созылады, ал мәтіннің
+  // абзацтары сұрақтың басы болып саналмайтын. Сондықтан бүкіл мәтін
+  // алдындағы сұрақтың блогына жабысып, Word оларды бір бүтін ретінде
+  // тасымалдайтын: беттің төменінде орын болса да, сұрақ мәтінмен бірге
+  // келесі бетке кетіп қалатын.
+  let inPassage = false;
   /** Сұрақ басталатын абзацтар — блокты бөлу үшін. */
-  const questionStarts = new Set<Element>();
+  // Екі бөлек жиын:
+  //   spaceStarts — алдына аралық қойылатын абзацтар (әр сұрақ, әр мәтін);
+  //   blockStarts — бет ауысуы мүмкін жерлер.
+  // Бұрын біреу болатын, сондықтан «аралық керек» пен «бетті үзуге болады»
+  // бір нәрсе болып шыққан. Мәтін мен оның сұрақтарын бір бетте ұстау үшін
+  // оларды ажырату қажет: аралық бар, ал үзілу жоқ.
+  const spaceStarts = new Set<Element>();
+  const blockStarts = new Set<Element>();
+  const questionStarts = {
+    add(el: Element) {
+      spaceStarts.add(el);
+      blockStarts.add(el);
+    },
+  };
   // Суреттер екі тілде де болуы мүмкін: [kk] блогында қазақшасы, [ru]
   // блогында орысшасы — өйткені суреттегі жазулар аударылмайды.
   //
@@ -636,8 +669,11 @@ export async function buildCleanDocx(
       }
       if (/^(мәтін|матин|текст|passage)\s*\d+$/.test(key)) {
         stripTagPrefix(el, "");
+        spaceStarts.add(el);
+        blockStarts.add(el);
         keep.push(el);
         mode = "passage";
+        inPassage = true;
         continue;
       }
       // Танылмаған, бірақ жалғыз тұрған белгі — сессия аты, пән аты.
@@ -694,6 +730,10 @@ export async function buildCleanDocx(
         else el.insertBefore(run, el.firstChild);
         questionStarts.add(el);
       }
+      // Мәтінге тиесілі сұрақ блокты үзбейді: мәтін мен оның сұрақтары
+      // бір бетте қалуы керек. Бірақ алдында аралық болуы тиіс, сондықтан
+      // ол spaceStarts-қа түседі.
+      if (inPassage) blockStarts.delete(el);
       pendingNumber = null;
     }
 
@@ -707,7 +747,7 @@ export async function buildCleanDocx(
   // Соңғы сұрақ: өз тілінде суреті болмаса, басқа тілдегісін қосамыз.
   if (otherLangImages.length > 0 && !keptImageInQuestion) keep.push(...otherLangImages);
 
-  keepBlocksTogether(doc, keep, questionStarts);
+  keepBlocksTogether(doc, keep, blockStarts, spaceStarts);
 
   while (body.firstChild) body.removeChild(body.firstChild);
   keep.forEach((el) => body.appendChild(el));
