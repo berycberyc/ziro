@@ -17,6 +17,8 @@
  *     сурет жоғалмас үшін көшіріледі
  */
 
+import { buildQuantityTable, type QRow } from "./quantityTable";
+
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const XML_SPACE = "http://www.w3.org/XML/1998/namespace";
@@ -39,8 +41,8 @@ function headerXml(title: string, logoRelId: string): string {
  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
  <w:p>
   <w:pPr>
-   <w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>
    <w:pBdr><w:bottom w:val="single" w:sz="6" w:space="4" w:color="C9CDD3"/></w:pBdr>
+   <w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>
    <w:spacing w:after="120"/>
   </w:pPr>
   <w:r><w:drawing>
@@ -107,18 +109,58 @@ async function addHeaderFooter(
   body: Element,
   title: string
 ): Promise<void> {
-  // 1. Логотип. Сайттың өз файлынан алынады.
+  // 1. Логотип. Без него колонтитул не нужен — выходим до любых изменений.
   let logoBytes: Uint8Array;
   try {
     const res = await fetch("/logo-wide.png");
+    if (!res.ok) return;
     logoBytes = new Uint8Array(await res.arrayBuffer());
   } catch {
-    return; // логотип жүктелмесе — колонтитулсыз-ақ файл берген жөн
+    return;
   }
-  entries.push({ name: LOGO, data: logoBytes });
 
-  // 2. Колонтитулдың өз сілтемесі (логотипке).
+  // 2. Байланыстар тізімі. Файлда болмаса — құрамыз, шықпаймыз.
+  //
+  //    Бұрын осы жерде `if (!rels) return` тұрған. Word-та жасалмаған
+  //    файлда бұл бөлік болмайды, сондықтан функция логотип пен
+  //    колонтитулды пакетке салып қойып, содан кейін шығып кететін.
+  //    Нәтижесінде түрі жарияланбаған үш бөлік қалып, Word файлды
+  //    «бүлінген» деп санайтын.
+  let rels = entries.find((e) => e.name === "word/_rels/document.xml.rels");
+  if (!rels) {
+    rels = {
+      name: "word/_rels/document.xml.rels",
+      data: new TextEncoder().encode(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `</Relationships>`
+      ),
+    };
+    entries.push(rels);
+  }
+
+  // 3. Бөліктердің түрін жариялау. Бұл қадамсыз Word файлды ашпайды.
+  const ct = entries.find((e) => e.name === "[Content_Types].xml");
+  if (!ct) return;
+  let ctXml = decode(ct);
+  if (!/Extension="png"/i.test(ctXml)) {
+    ctXml = ctXml.replace(
+      /(<Types[^>]*>)/,
+      '$1<Default Extension="png" ContentType="image/png"/>'
+    );
+  }
+  if (!ctXml.includes('PartName="/word/ziro-header.xml"')) {
+    ctXml = ctXml.replace(
+      "</Types>",
+      '<Override PartName="/word/ziro-header.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
+        '<Override PartName="/word/ziro-footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
+        "</Types>"
+    );
+  }
+
+  // 4. Бәрі дайын — енді ғана пакетке жазамыз.
   const logoRelId = "rIdZiroLogo";
+  entries.push({ name: LOGO, data: logoBytes });
   entries.push({
     name: "word/_rels/ziro-header.xml.rels",
     data: new TextEncoder().encode(
@@ -128,13 +170,11 @@ async function addHeaderFooter(
 </Relationships>`
     ),
   });
-
   entries.push({ name: HDR, data: new TextEncoder().encode(headerXml(title, logoRelId)) });
   entries.push({ name: FTR, data: new TextEncoder().encode(footerXml()) });
 
-  // 3. Құжаттың сілтемелер тізіміне қосу.
-  const rels = entries.find((e) => e.name === "word/_rels/document.xml.rels");
-  if (!rels) return;
+  encodeInto(ct, ctXml);
+
   let relsXml = decode(rels);
   const n = nextRelId(relsXml);
   const hdrId = `rId${n}`;
@@ -147,41 +187,20 @@ async function addHeaderFooter(
   );
   encodeInto(rels, relsXml);
 
-  // 4. [Content_Types] — жаңа бөліктердің түрін жариялау.
-  const ct = entries.find((e) => e.name === "[Content_Types].xml");
-  if (ct) {
-    let ctXml = decode(ct);
-    if (!ctXml.includes('Extension="png"')) {
-      ctXml = ctXml.replace("<Types", '<Types').replace(
-        /(<Types[^>]*>)/,
-        '$1<Default Extension="png" ContentType="image/png"/>'
-      );
-    }
-    ctXml = ctXml.replace(
-      "</Types>",
-      '<Override PartName="/word/ziro-header.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
-        '<Override PartName="/word/ziro-footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
-        "</Types>"
-    );
-    encodeInto(ct, ctXml);
+  // 5. document.xml түбірі r кеңістігін жариялауы керек, әйтпесе
+  //    sectPr ішіндегі r:id-ді ешнәрсеге байлауға болмайды.
+  const root = doc.documentElement;
+  if (!root.getAttribute("xmlns:r")) {
+    root.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:r", R);
   }
 
-  // 5. sectPr — бетке қай колонтитул тиесілі екенін жазу.
-  //    Схема бойынша бұл жазбалар sectPr-дің ЕҢ БАСЫНДА тұруы керек.
-  let sectPr = Array.from(body.getElementsByTagNameNS(W, "sectPr")).pop() ?? null;
-  if (!sectPr) {
-    sectPr = doc.createElementNS(W, "w:sectPr");
-    body.appendChild(sectPr);
-  }
-  // Бастапқы файлдың колонтитулдары болса — оларды алып тастаймыз.
-  for (const tag of ["headerReference", "footerReference"]) {
-    for (const el of Array.from(sectPr.getElementsByTagNameNS(W, tag))) {
-      el.parentNode?.removeChild(el);
-    }
-  }
-  // titlePg болса, бірінші бет колонтитулсыз қалар еді — өшіреміз.
-  for (const el of Array.from(sectPr.getElementsByTagNameNS(W, "titlePg"))) {
-    el.parentNode?.removeChild(el);
+  // 6. sectPr: колонтитулға сілтемелер ең басында тұруы тиіс.
+  //    Барлық бөлімді өңдейміз — файлда бөлім үзілісі болуы мүмкін.
+  const sects = Array.from(body.getElementsByTagNameNS(W, "sectPr"));
+  if (sects.length === 0) {
+    const s = doc.createElementNS(W, "w:sectPr");
+    body.appendChild(s);
+    sects.push(s);
   }
 
   const mk = (tag: string, id: string) => {
@@ -190,8 +209,26 @@ async function addHeaderFooter(
     el.setAttributeNS(R, "r:id", id);
     return el;
   };
-  sectPr.insertBefore(mk("footerReference", ftrId), sectPr.firstChild);
-  sectPr.insertBefore(mk("headerReference", hdrId), sectPr.firstChild);
+
+  for (const sectPr of sects) {
+    for (const tag of ["headerReference", "footerReference", "titlePg"]) {
+      for (const el of Array.from(sectPr.getElementsByTagNameNS(W, tag))) {
+        el.parentNode?.removeChild(el);
+      }
+    }
+
+    // pgMar: header, footer, gutter схема бойынша міндетті. Оларсыз Word
+    // колонтитулды беттің шетінен қай қашықтықта басатынын білмейді.
+    const pgMar = sectPr.getElementsByTagNameNS(W, "pgMar")[0];
+    if (pgMar) {
+      for (const [name, val] of [["header", "709"], ["footer", "709"], ["gutter", "0"]]) {
+        if (!pgMar.getAttributeNS(W, name)) pgMar.setAttributeNS(W, `w:${name}`, val);
+      }
+    }
+
+    sectPr.insertBefore(mk("footerReference", ftrId), sectPr.firstChild);
+    sectPr.insertBefore(mk("headerReference", hdrId), sectPr.firstChild);
+  }
 }
 
 /**
@@ -210,7 +247,12 @@ async function addHeaderFooter(
  * бүкіл құжат бір бетке тартылып кетер еді. keepLines болса әр абзацқа
  * қойылады — ол көршісіне әсер етпейді.
  */
-function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>): void {
+function keepBlocksTogether(
+  doc: Document,
+  keep: Element[],
+  starts: Set<Element>,
+  spaceStarts: Set<Element>
+): void {
   const blocks: Element[][] = [];
   let cur: Element[] = [];
   for (const el of keep) {
@@ -262,7 +304,14 @@ function keepBlocksTogether(doc: Document, keep: Element[], starts: Set<Element>
     // Бос жол бет ауысқанда жоғарыда жалғыз қалып қоюы мүмкін, ал
     // аралық олай істемейді: ол жай ғана сұрақты жоғарғысынан
     // алыстатады. Бірінші сұраққа қойылмайды — беттің басында керегі жоқ.
-    if (b > 0) setSpaceBefore(doc, block[0], 240); // 240 = 12 пункт
+    // Аралық блоктың басына емес, аралық керек әр абзацқа қойылады:
+    // мәтінге тиесілі сұрақтар бір блоктың ішінде тұрса да, бір-бірінен
+    // алшақ болуы тиіс. Бірінші абзацқа қойылмайды — беттің басында
+    // керегі жоқ.
+    for (let i = 0; i <= last; i++) {
+      if (b === 0 && i === 0) continue;
+      if (spaceStarts.has(block[i])) setSpaceBefore(doc, block[i], 240); // 12 пункт
+    }
   }
 }
 
@@ -338,6 +387,8 @@ function crc32(bytes: Uint8Array): number {
 }
 
 async function writeZip(entries: ZipEntry[]): Promise<Blob> {
+  // OPC пакетінде каталог жазбалары болмауы керек.
+  entries = entries.filter((e) => !e.name.endsWith("/"));
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
@@ -514,15 +565,51 @@ export async function buildCleanDocx(
   const body = doc.getElementsByTagNameNS(W, "body")[0];
   if (!body) throw new Error("Құжаттың құрылымы танылмады.");
 
+  // Сандық сипаттама — бөлек жиналады: тізім емес, кесте керек.
+  // Файлда [A_баған] белгісі болса, сол пән деп танимыз.
+  const isQuantity = /\[\s*[ABab]_(баған|bagan)\s*\]/.test(
+    Array.from(body.getElementsByTagNameNS(W, "t"))
+      .map((t) => t.textContent ?? "")
+      .join("\n")
+  );
+  if (isQuantity) {
+    return buildQuantityDoc(entries, doc, body, lang, headerTitle);
+  }
+
   const keep: Element[] = [];
   let mode: "header" | "await" | "kk" | "ru" | "passage" = "header";
   let pendingNumber: string | null = null;
+  // Оқылым мәтінінің ішінде тұрмыз ба.
+  //
+  // Неге керек: блок келесі сұрақ басталғанша созылады, ал мәтіннің
+  // абзацтары сұрақтың басы болып саналмайтын. Сондықтан бүкіл мәтін
+  // алдындағы сұрақтың блогына жабысып, Word оларды бір бүтін ретінде
+  // тасымалдайтын: беттің төменінде орын болса да, сұрақ мәтінмен бірге
+  // келесі бетке кетіп қалатын.
+  let inPassage = false;
   /** Сұрақ басталатын абзацтар — блокты бөлу үшін. */
-  const questionStarts = new Set<Element>();
-  // Басқа тілдегі блоктағы суреттер: жоғалмауы үшін сақтап, осы тілдегі
-  // сұрақтың мәтінінен КЕЙІН қоямыз. Бұрын кезектің соңына түсіп, келесі
-  // сұрақтың алдында тұрып қалатын.
-  let pendingImages: Element[] = [];
+  // Екі бөлек жиын:
+  //   spaceStarts — алдына аралық қойылатын абзацтар (әр сұрақ, әр мәтін);
+  //   blockStarts — бет ауысуы мүмкін жерлер.
+  // Бұрын біреу болатын, сондықтан «аралық керек» пен «бетті үзуге болады»
+  // бір нәрсе болып шыққан. Мәтін мен оның сұрақтарын бір бетте ұстау үшін
+  // оларды ажырату қажет: аралық бар, ал үзілу жоқ.
+  const spaceStarts = new Set<Element>();
+  const blockStarts = new Set<Element>();
+  const questionStarts = {
+    add(el: Element) {
+      spaceStarts.add(el);
+      blockStarts.add(el);
+    },
+  };
+  // Суреттер екі тілде де болуы мүмкін: [kk] блогында қазақшасы, [ru]
+  // блогында орысшасы — өйткені суреттегі жазулар аударылмайды.
+  //
+  // Ереже: осы тілдің өз суреті болса, соны ғана аламыз. Болмаса — басқа
+  // тілдегісін аламыз (таза сызба, жазуы жоқ жағдай). Бұрын басқа тілдегі
+  // сурет әрқашан қосылатын, сондықтан екі суреті бар сұрақта екеуі де
+  // бір параққа түсіп қалатын.
+  let otherLangImages: Element[] = [];
   let keptImageInQuestion = false;
 
   for (const el of Array.from(body.children)) {
@@ -538,8 +625,8 @@ export async function buildCleanDocx(
     if (key) {
       if (/^question\s*\d+$/.test(key)) {
         // Сұрақ мәтіні табылмай қалса да сурет жоғалмасын.
-        if (pendingImages.length > 0 && !keptImageInQuestion) keep.push(...pendingImages);
-        pendingImages = [];
+        if (otherLangImages.length > 0 && !keptImageInQuestion) keep.push(...otherLangImages);
+        otherLangImages = [];
         keptImageInQuestion = false;
         pendingNumber = `${key.match(/\d+/)![0]}. `;
         mode = "await";
@@ -564,14 +651,29 @@ export async function buildCleanDocx(
       }
       if (/^[ab]_(баған|bagan)$/.test(key)) {
         if ((mode === "kk" || mode === "ru") && mode !== lang) continue;
-        stripTagPrefix(el, key[0].toUpperCase() + ") ");
+        // Сандықта сұрақтың жеке мәтіні жоқ: [question12]-ден кейін бірден
+        // бағандар келеді. Сондықтан нөмір А бағанының алдына қойылады —
+        // әйтпесе қоятын жер табылмай, барлық сұрақ нөмірсіз шығатын.
+        const isFirstColumn = key.startsWith("a");
+        stripTagPrefix(
+          el,
+          (pendingNumber && isFirstColumn ? pendingNumber : "") +
+            key[0].toUpperCase() + ") "
+        );
+        if (pendingNumber && isFirstColumn) {
+          questionStarts.add(el);
+          pendingNumber = null;
+        }
         keep.push(el);
         continue;
       }
       if (/^(мәтін|матин|текст|passage)\s*\d+$/.test(key)) {
         stripTagPrefix(el, "");
+        spaceStarts.add(el);
+        blockStarts.add(el);
         keep.push(el);
         mode = "passage";
+        inPassage = true;
         continue;
       }
       // Танылмаған, бірақ жалғыз тұрған белгі — сессия аты, пән аты.
@@ -580,7 +682,9 @@ export async function buildCleanDocx(
     }
 
     if ((mode === "kk" || mode === "ru") && mode !== lang) {
-      if (hasImage(el)) pendingImages.push(el);
+      // Басқа тілдің суретін бірден қоспаймыз — өз тілімізде суреті бар-жоғы
+      // белгісіз. Сұрақ біткенде ғана шешеміз.
+      if (hasImage(el)) otherLangImages.push(el);
       continue;
     }
     if (mode === "header") continue;
@@ -626,23 +730,24 @@ export async function buildCleanDocx(
         else el.insertBefore(run, el.firstChild);
         questionStarts.add(el);
       }
+      // Мәтінге тиесілі сұрақ блокты үзбейді: мәтін мен оның сұрақтары
+      // бір бетте қалуы керек. Бірақ алдында аралық болуы тиіс, сондықтан
+      // ол spaceStarts-қа түседі.
+      if (inPassage) blockStarts.delete(el);
       pendingNumber = null;
     }
 
     if (elHasImage) keptImageInQuestion = true;
     keep.push(el);
 
-    // Сұрақтың мәтінінен кейін — сол сұрақтың суреті.
-    if (isQuestionStart && pendingImages.length > 0) {
-      keep.push(...pendingImages);
-      pendingImages = [];
-      keptImageInQuestion = true;
-    }
+    // Өз тілінде суреті болса, басқа тілдегісі керек емес.
+    if (keptImageInQuestion) otherLangImages = [];
   }
 
-  if (pendingImages.length > 0 && !keptImageInQuestion) keep.push(...pendingImages);
+  // Соңғы сұрақ: өз тілінде суреті болмаса, басқа тілдегісін қосамыз.
+  if (otherLangImages.length > 0 && !keptImageInQuestion) keep.push(...otherLangImages);
 
-  keepBlocksTogether(doc, keep, questionStarts);
+  keepBlocksTogether(doc, keep, blockStarts, spaceStarts);
 
   while (body.firstChild) body.removeChild(body.firstChild);
   keep.forEach((el) => body.appendChild(el));
@@ -652,5 +757,91 @@ export async function buildCleanDocx(
   const out = new XMLSerializer().serializeToString(doc);
   docEntry.data = new TextEncoder().encode(out);
 
+  return writeZip(entries);
+}
+
+
+/**
+ * Сандық сипаттаманың баспа нұсқасы — кесте түрінде.
+ *
+ * Файлды сұрақтарға бөліп, әрқайсысынан үш бөлікті жинаймыз: шарт (болса),
+ * А бағаны, В бағаны. Содан кейін бәрін бір кестеге саламыз.
+ *
+ * Тілі бөлек: [kk] блогынан тек қазақшасы, [ru] блогынан тек орысшасы
+ * алынады — екеуі бір ұяшыққа қосылмайды.
+ */
+async function buildQuantityDoc(
+  entries: ZipEntry[],
+  doc: Document,
+  body: Element,
+  lang: "kk" | "ru",
+  headerTitle?: string
+): Promise<Blob> {
+  const rows: QRow[] = [];
+  let cur: QRow | null = null;
+  let mode: "header" | "await" | "kk" | "ru" = "header";
+  /** Қай бөлікке жазып отырмыз: шарт, А немесе В. */
+  let slot: "condition" | "a" | "b" = "condition";
+
+  const flush = () => {
+    if (cur) rows.push(cur);
+    cur = null;
+  };
+
+  for (const el of Array.from(body.children)) {
+    if (el.localName !== "p") continue;
+
+    const text = paragraphText(el);
+    const m = text.match(TAG_RE);
+    const key = m ? m[1].trim().toLowerCase() : null;
+
+    if (key) {
+      if (/^question\s*\d+$/.test(key)) {
+        flush();
+        cur = { number: `${key.match(/\d+/)![0]}.`, condition: [], colA: [], colB: [] };
+        mode = "await";
+        slot = "condition";
+        continue;
+      }
+      if (["kk", "қаз", "каз"].includes(key)) { mode = "kk"; slot = "condition"; continue; }
+      if (["ru", "рус"].includes(key)) { mode = "ru"; slot = "condition"; continue; }
+      if (/^[ab]_(баған|bagan)$/.test(key)) {
+        if (mode !== lang) continue;
+        slot = key.startsWith("a") ? "a" : "b";
+        // Белгіні алып тастап, қалғанын сол ұяшыққа саламыз.
+        stripTagPrefix(el, "");
+        if (paragraphText(el) || hasImage(el) || hasMath(el)) {
+          (slot === "a" ? cur!.colA : cur!.colB).push(el);
+        }
+        continue;
+      }
+      // Қалған белгілер — тақырып, дұрыс жауап, сессия аты — керек емес.
+      continue;
+    }
+
+    if (mode !== lang || !cur) continue;
+    if (isPageBreakOnly(el)) continue;
+    if (!paragraphText(el) && !hasImage(el) && !hasMath(el)) continue;
+
+    // Белгіден кейінгі жалғасы: сурет немесе қосымша жол сол ұяшыққа.
+    if (slot === "a") cur.colA.push(el);
+    else if (slot === "b") cur.colB.push(el);
+    else cur.condition.push(el);
+  }
+  flush();
+
+  const table = buildQuantityTable(doc, rows, lang);
+
+  const sect = Array.from(body.children).filter((c) => c.localName === "sectPr");
+  while (body.firstChild) body.removeChild(body.firstChild);
+  body.appendChild(table);
+  // Кестеден кейін бос абзац керек — Word талабы.
+  body.appendChild(doc.createElementNS(W, "w:p"));
+  for (const sp of sect) body.appendChild(sp);
+
+  if (headerTitle) await addHeaderFooter(entries, doc, body, headerTitle);
+
+  const docEntry = entries.find((e) => e.name === "word/document.xml")!;
+  docEntry.data = new TextEncoder().encode(new XMLSerializer().serializeToString(doc));
   return writeZip(entries);
 }
