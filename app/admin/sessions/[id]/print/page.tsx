@@ -4,15 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { removeStoredFiles } from "@/lib/storageCleanup";
+import { removeStoredFile, removeStoredFiles } from "@/lib/storageCleanup";
 import { fetchAll, fetchAllByIds } from "@/lib/fetchAll";
 import {
   SUBJECT_LABELS,
+  SUBJECT_MAX_COUNT,
   TEST_TYPE_SUBJECTS,
   MONOLINGUAL_SUBJECTS,
   type SubjectKey,
 } from "@/lib/questions/subjects";
-import { buildRoomPdf, printFileKey, type RoomStudent } from "@/lib/print/buildRoomPdf";
+import { buildRoomPdf, printFileKey, type RoomStudent, type SheetPack } from "@/lib/print/buildRoomPdf";
+import { parseAnswerSheetPack, missingFromPack, type SheetPageIndex } from "@/lib/print/answerSheetPack";
 
 /**
  * Аудитория бойынша басып шығару жинағы.
@@ -23,6 +25,12 @@ import { buildRoomPdf, printFileKey, type RoomStudent } from "@/lib/print/buildR
  *
  * Тек қажет файлдар талап етіледі: егер осы сессияда РФМШ таңдаған оқушы
  * болмаса, РФМШ PDF-і сұралмайды.
+ *
+ * ЖАУАП ПАРАҚТАРЫ. ZipGrade пачкасы — бір пәнге бір файл, ішінде әр
+ * оқушының өз беті. Пачка — тізімнің ЖҮКТЕЛГЕН СӘТТЕГІ көшірмесі, ал тізім
+ * өзгереді. Кейін тіркелген бала пачкада жоқ болса, ол парақсыз қалады да,
+ * мұны аудиторияда ғана білер едік. Сондықтан тексерілетіні «файл бар ма»
+ * емес, «файл тізіммен сәйкес пе».
  */
 
 type Booking = {
@@ -44,6 +52,28 @@ type Need = {
   url?: string;
 };
 
+type Pack = {
+  subject: SubjectKey;
+  fileUrl: string;
+  pageCount: number;
+  questionCount: number;
+  pages: SheetPageIndex[];
+  uploadedAt: string;
+};
+
+/** Бір пәннің жауап парағы бойынша жағдайы. */
+type SheetNeed = {
+  subject: SubjectKey;
+  students: number;
+  pack: Pack | null;
+  /** Пачкада жоқ оқушылар — аты-жөнімен. */
+  missing: string[];
+  /** Пачкада артық қалған беттер. Кедергі емес, ескерту ғана. */
+  extra: number;
+  /** Парақтағы сұрақ саны пәнмен сәйкес пе. */
+  countOk: boolean;
+};
+
 export default function PrintRoomsPage() {
   const params = useParams();
   const sessionId = params.id as string;
@@ -51,6 +81,7 @@ export default function PrintRoomsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [progress, setProgress] = useState("");
 
   const [sessionTitle, setSessionTitle] = useState("");
@@ -59,6 +90,7 @@ export default function PrintRoomsPage() {
   const [selectedRoom, setSelectedRoom] = useState("");
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [needs, setNeeds] = useState<Need[]>([]);
+  const [sheetNeeds, setSheetNeeds] = useState<SheetNeed[]>([]);
   const [students, setStudents] = useState<RoomStudent[]>([]);
 
   const load = useCallback(async () => {
@@ -88,6 +120,7 @@ export default function PrintRoomsPage() {
     if (bookings.length === 0) {
       setStudents([]);
       setNeeds([]);
+      setSheetNeeds([]);
       setMissingFields([]);
       setLoading(false);
       return;
@@ -183,6 +216,58 @@ export default function PrintRoomsPage() {
     setNeeds(needList);
     setStudents(list);
 
+    // ---- жауап парақтары ----
+    // РФМШ парағын ZipGrade оқи алмайды, оны жүйе өзі салады.
+    const sheetSubjects = new Map<SubjectKey, RoomStudent[]>();
+    list.forEach((st) => {
+      st.subjects.forEach((subject) => {
+        if (subject === "rfmsh") return;
+        const cur = sheetSubjects.get(subject);
+        if (cur) cur.push(st);
+        else sheetSubjects.set(subject, [st]);
+      });
+    });
+
+    const packRows = await fetchAll<any>((from, to) =>
+      supabase
+        .from("answer_sheet_packs")
+        .select("subject, file_url, page_count, question_count, pages, uploaded_at")
+        .eq("test_session_id", sessionId)
+        .order("subject")
+        .range(from, to)
+    );
+    const packBySubject = new Map<SubjectKey, Pack>(
+      packRows.map((p: any) => [
+        p.subject as SubjectKey,
+        {
+          subject: p.subject,
+          fileUrl: p.file_url,
+          pageCount: p.page_count,
+          questionCount: p.question_count,
+          pages: (p.pages ?? []) as SheetPageIndex[],
+          uploadedAt: p.uploaded_at,
+        },
+      ])
+    );
+
+    const sheetList: SheetNeed[] = [...sheetSubjects.entries()]
+      .map(([subject, subjectStudents]) => {
+        const pack = packBySubject.get(subject) ?? null;
+        const neededIds = subjectStudents.map((s) => s.zipgradeId);
+        const missingIds = pack ? missingFromPack(pack.pages, neededIds) : [];
+        const byId = new Map(subjectStudents.map((s) => [s.zipgradeId, s.fullName]));
+        return {
+          subject,
+          students: subjectStudents.length,
+          pack,
+          missing: missingIds.map((id) => `${byId.get(id) ?? "?"} (${id})`),
+          extra: pack ? Math.max(0, pack.pages.length - (neededIds.length - missingIds.length)) : 0,
+          countOk: pack ? pack.questionCount === SUBJECT_MAX_COUNT[subject] : false,
+        };
+      })
+      .sort((a, b) => a.subject.localeCompare(b.subject));
+    setSheetNeeds(sheetList);
+
     const roomList = [...new Set(list.map((s) => s.classroom))].sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true })
     );
@@ -196,7 +281,76 @@ export default function PrintRoomsPage() {
   }, [load]);
 
   const missingFiles = needs.filter((n) => !n.ready);
-  const blocked = missingFields.length > 0 || missingFiles.length > 0 || students.length === 0;
+  const badSheets = sheetNeeds.filter((s) => !s.pack || !s.countOk || s.missing.length > 0);
+  const blocked =
+    missingFields.length > 0 ||
+    missingFiles.length > 0 ||
+    badSheets.length > 0 ||
+    students.length === 0;
+
+  /** ZipGrade пачкасын жүктеу: алдымен талданады, содан кейін ғана сақталады. */
+  async function handleUploadPack(subject: SubjectKey, file: File) {
+    setBusy("pack-" + subject);
+    setError("");
+    setMessage("");
+    setProgress("");
+    try {
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        setError("Тек PDF файл жүктеуге болады.");
+        return;
+      }
+
+      // 1. Талдау. Файл бүлінген не басқа пәннен болса, қоймаға тимейміз.
+      const index = await parseAnswerSheetPack(file, (done, total) =>
+        setProgress(`${done} / ${total} бет оқылды`)
+      );
+      if (index.questionCount !== SUBJECT_MAX_COUNT[subject]) {
+        setError(
+          `Бұл пачкада ${index.questionCount} сұрақ, ал ${SUBJECT_LABELS[subject]} үшін ${SUBJECT_MAX_COUNT[subject]} керек. Басқа пәннің файлы болуы мүмкін.`
+        );
+        return;
+      }
+
+      // 2. Қоймаға.
+      const path = `${sessionId}/${subject}-${Date.now()}.pdf`;
+      const { error: upErr } = await supabase.storage
+        .from("answer-sheets")
+        .upload(path, file, { contentType: "application/pdf" });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("answer-sheets").getPublicUrl(path);
+
+      const previousUrl = sheetNeeds.find((s) => s.subject === subject)?.pack?.fileUrl ?? null;
+
+      // 3. Дерекқорға.
+      const { error: dbErr } = await supabase.from("answer_sheet_packs").upsert(
+        {
+          test_session_id: sessionId,
+          subject,
+          file_url: pub.publicUrl,
+          page_count: index.pageCount,
+          question_count: index.questionCount,
+          pages: index.pages,
+          uploaded_at: new Date().toISOString(),
+        },
+        { onConflict: "test_session_id,subject" }
+      );
+      if (dbErr) throw dbErr;
+
+      // 4. Жаңасы жазылды — ескісін өшіреміз.
+      if (previousUrl && previousUrl !== pub.publicUrl) {
+        await removeStoredFile("answer-sheets", previousUrl);
+      }
+
+      await load();
+      setMessage(`${SUBJECT_LABELS[subject]}: ${index.pageCount} парақ жүктелді.`);
+    } catch (err: any) {
+      console.error(err);
+      setError("Пачка жүктелмеді: " + (err?.message ?? "белгісіз"));
+    } finally {
+      setBusy("");
+      setProgress("");
+    }
+  }
 
   async function handleBuild() {
     if (!selectedRoom) return;
@@ -218,12 +372,21 @@ export default function PrintRoomsPage() {
         filesMap.set(key, await res.arrayBuffer());
       }
 
+      // Жауап парақтары да бір рет.
+      const sheetsMap = new Map<SubjectKey, SheetPack>();
+      for (const sn of sheetNeeds) {
+        if (!sn.pack) continue;
+        const res = await fetch(sn.pack.fileUrl);
+        sheetsMap.set(sn.subject, { bytes: await res.arrayBuffer(), pages: sn.pack.pages });
+      }
+
       const blob = await buildRoomPdf({
         sessionTitle,
         sessionDate,
         classroom: selectedRoom,
         students: roomStudents,
         files: filesMap,
+        sheets: sheetsMap,
         onProgress: (done, total) => setProgress(`${done} / ${total} оқушы`),
       });
 
@@ -250,9 +413,15 @@ export default function PrintRoomsPage() {
         .from("print_files")
         .select("file_url")
         .eq("test_session_id", sessionId);
+      const { data: packs } = await supabase
+        .from("answer_sheet_packs")
+        .select("file_url")
+        .eq("test_session_id", sessionId);
 
       await supabase.from("print_files").delete().eq("test_session_id", sessionId);
+      await supabase.from("answer_sheet_packs").delete().eq("test_session_id", sessionId);
       await removeStoredFiles("print-files", (files ?? []).map((f: any) => f.file_url));
+      await removeStoredFiles("answer-sheets", (packs ?? []).map((p: any) => p.file_url));
       await load();
     } finally {
       setBusy("");
@@ -268,8 +437,8 @@ export default function PrintRoomsPage() {
       </Link>
       <h1 className="font-display text-2xl font-bold text-admin">Аудитория бойынша басып шығару</h1>
       <p className="mt-1 text-sm text-ink/60">
-        Әр оқушының әр пәні алдында титул беті: аты, нұсқасы, аудиториясы, орны. Кесіп алып,
-        орындарға таратуға дайын.
+        Әр оқушының әр пәні алдында оның өз жауап парағы: аты, нұсқасы, аудиториясы, орны, ал
+        «Нұсқа» шеңбері боялған. Екі жақты басып шығаруға дайын.
       </p>
 
       {students.length === 0 && missingFields.length === 0 && (
@@ -291,6 +460,77 @@ export default function PrintRoomsPage() {
               <li key={i}>{m}</li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {sheetNeeds.length > 0 && (
+        <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
+          <h2 className="font-display text-lg font-bold text-ink">
+            Жауап парақтары: {sheetNeeds.filter((s) => s.pack && s.countOk && s.missing.length === 0).length} /{" "}
+            {sheetNeeds.length}
+          </h2>
+          <p className="mt-1 text-sm text-ink/60">
+            ZipGrade-те пән бойынша пачка жасайсыз да, PDF-ін осында жүктейсіз. Тізім өзгерсе
+            (жаңа бала қосылса) пачканы қайта жасап, қайта жүктеу керек.
+          </p>
+
+          <div className="mt-3 flex flex-col gap-1.5">
+            {sheetNeeds.map((s) => {
+              const ok = s.pack && s.countOk && s.missing.length === 0;
+              return (
+                <div
+                  key={s.subject}
+                  className={`rounded-xl border px-4 py-2.5 text-sm ${
+                    ok ? "border-ink/10 bg-white" : "border-red-200 bg-red-50"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-ink">{SUBJECT_LABELS[s.subject]}</span>
+                    <span className="flex items-center gap-3">
+                      <span className="font-mono text-xs text-ink/50">{s.students} оқушы</span>
+                      <span className={`font-mono text-xs ${ok ? "text-parent" : "text-red-600"}`}>
+                        {!s.pack
+                          ? "пачка жоқ"
+                          : !s.countOk
+                          ? `парақта ${s.pack.questionCount} сұрақ`
+                          : s.missing.length > 0
+                          ? `${s.missing.length} оқушының парағы жоқ`
+                          : "дайын ✓"}
+                      </span>
+                      <label className="focus-ring cursor-pointer rounded-full border border-ink/15 px-3 py-1 text-xs font-semibold text-ink/70 hover:bg-ink/5">
+                        {busy === "pack-" + s.subject ? progress || "Оқылуда..." : "PDF жүктеу"}
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          disabled={busy !== ""}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = "";
+                            if (f) handleUploadPack(s.subject, f);
+                          }}
+                        />
+                      </label>
+                    </span>
+                  </div>
+
+                  {s.missing.length > 0 && (
+                    <ul className="mt-2 max-h-32 list-disc overflow-auto pl-5 text-xs text-red-700">
+                      {s.missing.map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {s.pack && s.countOk && s.missing.length === 0 && s.extra > 0 && (
+                    <p className="mt-1 text-xs text-ink/45">
+                      Пачкада {s.extra} артық парақ бар — брондауын алып тастағандар. Кедергі емес,
+                      олар жинаққа кірмейді.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 
@@ -364,27 +604,30 @@ export default function PrintRoomsPage() {
             )}
           </div>
           <p className="mt-3 text-xs text-ink/40">
-            Құрастырылған файл сақталмайды — жүктеп алып, басып шығарасыз.
+            Құрастырылған файл сақталмайды — жүктеп алып, басып шығарасыз. Принтерде «100%»
+            («Actual size») қойыңыз, «бетке шақтау» емес.
           </p>
         </section>
       )}
 
-      {needs.some((n) => n.ready) && (
+      {(needs.some((n) => n.ready) || sheetNeeds.some((s) => s.pack)) && (
         <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
           <h2 className="font-display text-sm font-bold text-ink">Орынды босату</h2>
           <p className="mt-1 text-xs text-ink/50">
-            Байқау өткеннен кейін PDF-тер керек емес. Сұрақтар базада қалады.
+            Байқау өткеннен кейін PDF-тер де, жауап парақтарының пачкалары да керек емес. Сұрақтар
+            базада қалады.
           </p>
           <button
             onClick={handleClearPdfs}
             disabled={busy !== ""}
             className="focus-ring mt-3 rounded-full border border-ink/15 px-4 py-2 text-xs font-semibold text-ink/60 hover:bg-ink/5 disabled:opacity-50"
           >
-            {busy === "clear" ? "Өшірілуде..." : "Барлық PDF-ті өшіру"}
+            {busy === "clear" ? "Өшірілуде..." : "Барлық файлды өшіру"}
           </button>
         </section>
       )}
 
+      {message && <p className="mt-4 text-sm text-parent">{message}</p>}
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
     </div>
   );
