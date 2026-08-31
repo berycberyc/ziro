@@ -21,6 +21,7 @@
     "jspdf": "^2.5.1",
     "pdf-lib": "^1.17.1",
     "@pdf-lib/fontkit": "^1.1.1",
+    "pdfjs-dist": "4.7.76",
     "html5-qrcode": "^2.3.8",
     "jszip": "^3.10.1",
     "docx": "^9.0.2",
