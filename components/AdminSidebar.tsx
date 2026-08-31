@@ -9,7 +9,6 @@ const navItems = [
   { href: "/admin/bookings", label: "Бронирование" },
   { href: "/admin/results", label: "Нәтижелер" },
   { href: "/admin/online-test", label: "Онлайн тест" },
-  { href: "/admin/zipgrade", label: "ZipGrade" },
 ];
 
 export default function AdminSidebar() {
