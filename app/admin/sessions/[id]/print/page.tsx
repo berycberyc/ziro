@@ -14,7 +14,16 @@ import {
   type SubjectKey,
 } from "@/lib/questions/subjects";
 import { buildRoomPdf, printFileKey, type RoomStudent, type SheetPack } from "@/lib/print/buildRoomPdf";
-import { parseAnswerSheetPack, missingFromPack, type SheetPageIndex } from "@/lib/print/answerSheetPack";
+import {
+  parseAnswerSheetPack,
+  parseKeyTemplate,
+  missingFromPack,
+  LETTERS,
+  type SheetPageIndex,
+  type KeyTemplateIndex,
+  type Letter,
+} from "@/lib/print/answerSheetPack";
+import { buildAnswerKeyPdf, type VariantAnswers } from "@/lib/print/buildAnswerKey";
 
 /**
  * Аудитория бойынша басып шығару жинағы.
@@ -23,14 +32,15 @@ import { parseAnswerSheetPack, missingFromPack, type SheetPageIndex } from "@/li
  * немесе қажет PDF-тердің біреуі жүктелмесе — ештеңе берілмейді, себебі
  * басып шығару бір рет жасалады және жарты жинақ ең жаман нәтиже.
  *
- * Тек қажет файлдар талап етіледі: егер осы сессияда РФМШ таңдаған оқушы
- * болмаса, РФМШ PDF-і сұралмайды.
- *
  * ЖАУАП ПАРАҚТАРЫ. ZipGrade пачкасы — бір пәнге бір файл, ішінде әр
  * оқушының өз беті. Пачка — тізімнің ЖҮКТЕЛГЕН СӘТТЕГІ көшірмесі, ал тізім
  * өзгереді. Кейін тіркелген бала пачкада жоқ болса, ол парақсыз қалады да,
  * мұны аудиторияда ғана білер едік. Сондықтан тексерілетіні «файл бар ма»
  * емес, «файл тізіммен сәйкес пе».
+ *
+ * КІЛТ. Бөлек бос бланк жүктеледі, ал жүйе оған дұрыс жауаптарды өзі
+ * бояйды — нұсқа сайын бір бет. Қолмен енгізгенде бір қате бүкіл ағынды
+ * бүлдіреді, ал ол қате нәтижелерден көрінбейді.
  */
 
 type Booking = {
@@ -65,6 +75,7 @@ type Pack = {
 type SheetNeed = {
   subject: SubjectKey;
   students: number;
+  variants: number[];
   pack: Pack | null;
   /** Пачкада жоқ оқушылар — аты-жөнімен. */
   missing: string[];
@@ -72,6 +83,8 @@ type SheetNeed = {
   extra: number;
   /** Парақтағы сұрақ саны пәнмен сәйкес пе. */
   countOk: boolean;
+  /** Кілт үлгісі. */
+  template: { fileUrl: string; questionCount: number; index: KeyTemplateIndex } | null;
 };
 
 export default function PrintRoomsPage() {
@@ -216,8 +229,8 @@ export default function PrintRoomsPage() {
     setNeeds(needList);
     setStudents(list);
 
-    // ---- жауап парақтары ----
-    // РФМШ парағын ZipGrade оқи алмайды, оны жүйе өзі салады.
+    // ---- жауап парақтары және кілт үлгілері ----
+    // РФМШ парағын ZipGrade оқи алмайды, оны жүйе өзі салады, кілті қолмен.
     const sheetSubjects = new Map<SubjectKey, RoomStudent[]>();
     list.forEach((st) => {
       st.subjects.forEach((subject) => {
@@ -228,14 +241,25 @@ export default function PrintRoomsPage() {
       });
     });
 
-    const packRows = await fetchAll<any>((from, to) =>
-      supabase
-        .from("answer_sheet_packs")
-        .select("subject, file_url, page_count, question_count, pages, uploaded_at")
-        .eq("test_session_id", sessionId)
-        .order("subject")
-        .range(from, to)
-    );
+    const [packRows, templateRows] = await Promise.all([
+      fetchAll<any>((from, to) =>
+        supabase
+          .from("answer_sheet_packs")
+          .select("subject, file_url, page_count, question_count, pages, uploaded_at")
+          .eq("test_session_id", sessionId)
+          .order("subject")
+          .range(from, to)
+      ),
+      fetchAll<any>((from, to) =>
+        supabase
+          .from("answer_key_templates")
+          .select("subject, file_url, question_count, index")
+          .eq("test_session_id", sessionId)
+          .order("subject")
+          .range(from, to)
+      ),
+    ]);
+
     const packBySubject = new Map<SubjectKey, Pack>(
       packRows.map((p: any) => [
         p.subject as SubjectKey,
@@ -249,6 +273,12 @@ export default function PrintRoomsPage() {
         },
       ])
     );
+    const templateBySubject = new Map<SubjectKey, SheetNeed["template"]>(
+      templateRows.map((t: any) => [
+        t.subject as SubjectKey,
+        { fileUrl: t.file_url, questionCount: t.question_count, index: t.index as KeyTemplateIndex },
+      ])
+    );
 
     const sheetList: SheetNeed[] = [...sheetSubjects.entries()]
       .map(([subject, subjectStudents]) => {
@@ -259,10 +289,12 @@ export default function PrintRoomsPage() {
         return {
           subject,
           students: subjectStudents.length,
+          variants: [...new Set(subjectStudents.map((s) => s.variant))].sort((a, b) => a - b),
           pack,
           missing: missingIds.map((id) => `${byId.get(id) ?? "?"} (${id})`),
           extra: pack ? Math.max(0, pack.pages.length - (neededIds.length - missingIds.length)) : 0,
           countOk: pack ? pack.questionCount === SUBJECT_MAX_COUNT[subject] : false,
+          template: templateBySubject.get(subject) ?? null,
         };
       })
       .sort((a, b) => a.subject.localeCompare(b.subject));
@@ -352,6 +384,131 @@ export default function PrintRoomsPage() {
     }
   }
 
+  /** Кілт үлгісін — бос бланкті — жүктеу. */
+  async function handleUploadTemplate(subject: SubjectKey, file: File) {
+    setBusy("tpl-" + subject);
+    setError("");
+    setMessage("");
+    try {
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        setError("Тек PDF файл жүктеуге болады.");
+        return;
+      }
+
+      const index = await parseKeyTemplate(file);
+      if (index.questionCount !== SUBJECT_MAX_COUNT[subject]) {
+        setError(
+          `Бұл бланкте ${index.questionCount} сұрақ, ал ${SUBJECT_LABELS[subject]} үшін ${SUBJECT_MAX_COUNT[subject]} керек.`
+        );
+        return;
+      }
+
+      const path = `${sessionId}/key-${subject}-${Date.now()}.pdf`;
+      const { error: upErr } = await supabase.storage
+        .from("answer-sheets")
+        .upload(path, file, { contentType: "application/pdf" });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("answer-sheets").getPublicUrl(path);
+
+      const previousUrl = sheetNeeds.find((s) => s.subject === subject)?.template?.fileUrl ?? null;
+
+      const { error: dbErr } = await supabase.from("answer_key_templates").upsert(
+        {
+          test_session_id: sessionId,
+          subject,
+          file_url: pub.publicUrl,
+          question_count: index.questionCount,
+          index,
+          uploaded_at: new Date().toISOString(),
+        },
+        { onConflict: "test_session_id,subject" }
+      );
+      if (dbErr) throw dbErr;
+
+      if (previousUrl && previousUrl !== pub.publicUrl) {
+        await removeStoredFile("answer-sheets", previousUrl);
+      }
+
+      await load();
+      setMessage(`${SUBJECT_LABELS[subject]}: кілт үлгісі жүктелді.`);
+    } catch (err: any) {
+      console.error(err);
+      setError("Үлгі жүктелмеді: " + (err?.message ?? "белгісіз"));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /** Дұрыс жауаптары боялған парақтарды құрастыру — нұсқа сайын бір бет. */
+  async function handleBuildKey(sn: SheetNeed) {
+    if (!sn.template) return;
+    setBusy("key-" + sn.subject);
+    setError("");
+    setMessage("");
+    try {
+      const rows = await fetchAll<any>((from, to) =>
+        supabase
+          .from("questions")
+          .select("variant_number, question_number, answer_format, choices, correct_answer")
+          .eq("session_id", sessionId)
+          .eq("subject", sn.subject)
+          .in("variant_number", sn.variants)
+          .order("variant_number")
+          .order("question_number")
+          .range(from, to)
+      );
+
+      const answers = new Map<number, VariantAnswers>();
+      sn.variants.forEach((v) => answers.set(v, new Map()));
+
+      rows.forEach((q: any) => {
+        const letter = letterOf(q);
+        if (!letter) return;
+        answers.get(q.variant_number)?.set(q.question_number, letter);
+      });
+
+      // Толық емес нұсқа — кілт те толық емес. Бұл үнсіз өтпеуі керек.
+      const gaps: string[] = [];
+      for (const v of sn.variants) {
+        const got = answers.get(v)!;
+        const missing: number[] = [];
+        for (let n = 1; n <= sn.template.questionCount; n++) if (!got.has(n)) missing.push(n);
+        if (missing.length > 0) {
+          gaps.push(
+            `${v}-нұсқа: ${missing.length} сұрақтың дұрыс жауабы жоқ (${missing
+              .slice(0, 8)
+              .join(", ")}${missing.length > 8 ? "…" : ""})`
+          );
+        }
+      }
+      if (gaps.length > 0) {
+        setError(`${SUBJECT_LABELS[sn.subject]} — ${gaps.join("; ")}`);
+        return;
+      }
+
+      const templateBytes = await fetch(sn.template.fileUrl).then((r) => r.arrayBuffer());
+      const blob = await buildAnswerKeyPdf({
+        sessionTitle,
+        sessionDate,
+        subject: sn.subject,
+        templateBytes,
+        index: sn.template.index,
+        answers,
+      });
+
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `kilt-${sn.subject}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err: any) {
+      console.error(err);
+      setError("Кілт құрастырылмады: " + (err?.message ?? "белгісіз"));
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function handleBuild() {
     if (!selectedRoom) return;
     setBusy("build");
@@ -417,11 +574,19 @@ export default function PrintRoomsPage() {
         .from("answer_sheet_packs")
         .select("file_url")
         .eq("test_session_id", sessionId);
+      const { data: templates } = await supabase
+        .from("answer_key_templates")
+        .select("file_url")
+        .eq("test_session_id", sessionId);
 
       await supabase.from("print_files").delete().eq("test_session_id", sessionId);
       await supabase.from("answer_sheet_packs").delete().eq("test_session_id", sessionId);
+      await supabase.from("answer_key_templates").delete().eq("test_session_id", sessionId);
       await removeStoredFiles("print-files", (files ?? []).map((f: any) => f.file_url));
-      await removeStoredFiles("answer-sheets", (packs ?? []).map((p: any) => p.file_url));
+      await removeStoredFiles(
+        "answer-sheets",
+        [...(packs ?? []), ...(templates ?? [])].map((p: any) => p.file_url)
+      );
       await load();
     } finally {
       setBusy("");
@@ -466,7 +631,8 @@ export default function PrintRoomsPage() {
       {sheetNeeds.length > 0 && (
         <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
           <h2 className="font-display text-lg font-bold text-ink">
-            Жауап парақтары: {sheetNeeds.filter((s) => s.pack && s.countOk && s.missing.length === 0).length} /{" "}
+            Жауап парақтары:{" "}
+            {sheetNeeds.filter((s) => s.pack && s.countOk && s.missing.length === 0).length} /{" "}
             {sheetNeeds.length}
           </h2>
           <p className="mt-1 text-sm text-ink/60">
@@ -530,6 +696,66 @@ export default function PrintRoomsPage() {
                 </div>
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {sheetNeeds.length > 0 && (
+        <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
+          <h2 className="font-display text-lg font-bold text-ink">
+            Жауап кілті: {sheetNeeds.filter((s) => s.template).length} / {sheetNeeds.length}
+          </h2>
+          <p className="mt-1 text-sm text-ink/60">
+            ZipGrade-те пән бойынша БОС бланк жасаңыз — тізімсіз, бір бет — және осында жүктеңіз.
+            Содан кейін «Кілт жүктеу» дұрыс жауаптары боялған парақтарды береді, нұсқа сайын бір
+            бет. Оларды басып шығарып, ZipGrade-ке кілт ретінде сканерлейсіз.
+          </p>
+          <p className="mt-1 text-xs text-ink/45">
+            РФМШ мұнда жоқ: онда жауап — сан, шеңбер жоқ. Оның кілті қолмен қалады.
+          </p>
+
+          <div className="mt-3 flex flex-col gap-1.5">
+            {sheetNeeds.map((s) => (
+              <div
+                key={s.subject}
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-sm ${
+                  s.template ? "border-ink/10 bg-white" : "border-ink/10 bg-ink/[0.02]"
+                }`}
+              >
+                <span className="text-ink">{SUBJECT_LABELS[s.subject]}</span>
+                <span className="flex items-center gap-3">
+                  <span className="font-mono text-xs text-ink/50">
+                    {s.variants.length} нұсқа
+                  </span>
+                  <span
+                    className={`font-mono text-xs ${s.template ? "text-parent" : "text-ink/40"}`}
+                  >
+                    {s.template ? "үлгі дайын ✓" : "үлгі жоқ"}
+                  </span>
+                  <label className="focus-ring cursor-pointer rounded-full border border-ink/15 px-3 py-1 text-xs font-semibold text-ink/70 hover:bg-ink/5">
+                    {busy === "tpl-" + s.subject ? "Оқылуда..." : "Бос бланк жүктеу"}
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      disabled={busy !== ""}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) handleUploadTemplate(s.subject, f);
+                      }}
+                    />
+                  </label>
+                  <button
+                    onClick={() => handleBuildKey(s)}
+                    disabled={!s.template || busy !== ""}
+                    className="focus-ring rounded-full bg-admin px-4 py-1 text-xs font-semibold text-white disabled:opacity-30"
+                  >
+                    {busy === "key-" + s.subject ? "Құрастырылуда..." : "Кілт жүктеу"}
+                  </button>
+                </span>
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -610,12 +836,12 @@ export default function PrintRoomsPage() {
         </section>
       )}
 
-      {(needs.some((n) => n.ready) || sheetNeeds.some((s) => s.pack)) && (
+      {(needs.some((n) => n.ready) || sheetNeeds.some((s) => s.pack || s.template)) && (
         <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
           <h2 className="font-display text-sm font-bold text-ink">Орынды босату</h2>
           <p className="mt-1 text-xs text-ink/50">
-            Байқау өткеннен кейін PDF-тер де, жауап парақтарының пачкалары да керек емес. Сұрақтар
-            базада қалады.
+            Байқау өткеннен кейін PDF-тер де, жауап парақтары мен кілт үлгілері де керек емес.
+            Сұрақтар базада қалады.
           </p>
           <button
             onClick={handleClearPdfs}
@@ -631,4 +857,22 @@ export default function PrintRoomsPage() {
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
     </div>
   );
+}
+
+/**
+ * Сұрақтың дұрыс жауабын әріпке айналдыру.
+ *   abcd     — choices ішіндегі correct белгісі бойынша
+ *   quantity — correct_answer-де 'A'…'D' болып тұр
+ *   numeric  — әріп жоқ (РФМШ), кілт парағына түспейді
+ */
+function letterOf(q: any): Letter | null {
+  if (q.answer_format === "abcd") {
+    const i = (q.choices ?? []).findIndex((c: any) => c?.correct);
+    return i >= 0 && i < LETTERS.length ? LETTERS[i] : null;
+  }
+  if (q.answer_format === "quantity") {
+    const v = String(q.correct_answer ?? "").trim().toUpperCase();
+    return (LETTERS as readonly string[]).includes(v) ? (v as Letter) : null;
+  }
+  return null;
 }

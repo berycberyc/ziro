@@ -1,23 +1,28 @@
 /**
- * ZipGrade пачкасын талдау.
+ * ZipGrade парақтарын талдау.
  *
- * Пачка — бір пәннің жауап парақтары, бір оқушыға бір бет. Бізге әр
- * беттен үш нәрсе керек:
- *   • ZipGrade ID — бет кімдікі екенін білу үшін. Атпен салыстыруға
- *     болмайды: ZipGrade-тегі жазылуы мен базадағы жазылуы бір әріппен
- *     не бос орынмен ажырап кетеді, ал ID — бес цифр, ажырамайды.
- *   • «Нұсқа» шеңберлерінің координаталары — керектісін бояу үшін.
- *   • Парақтағы сұрақ саны — пачка шынымен осы пәннен бе, соны тексеру.
+ * Екі түрлі файл өңделеді:
+ *
+ *   ПАЧКА — бір пәннің оқушылық парақтары, бір оқушыға бір бет. Одан
+ *   ZipGrade ID, беттің нөмірі және «Нұсқа» шеңберлері алынады.
+ *
+ *   КІЛТ ҮЛГІСІ — сол пәннің БОС парағы, тізімсіз, бір бет. Одан «Нұсқа»
+ *   шеңберлерінен басқа әр сұрақтың A/B/C/D шеңберлері де алынады, сонда
+ *   жүйе дұрыс жауаптарды өзі бояп бере алады.
+ *
+ * Неге кілт үшін бөлек бос парақ керек. Пачканың әр бетінде нақты
+ * оқушының аты жазулы және оның ID-і боялған. Ондай бетке дұрыс
+ * жауаптарды бояп сканерлесек, ZipGrade оны сол оқушының жүз пайыздық
+ * жұмысы деп жазып алар еді.
  *
  * Талдау БІР РЕТ, жүктеу кезінде жасалады. Нәтижесі базада сақталады да,
- * басып шығару соны дайын күйінде алады: жүзден аса бетті әр басып
- * шығаруда қайта талдау — бос жұмыс.
+ * басып шығару соны дайын күйінде алады.
  *
  * Шеңберлерді неге мәтін арқылы табамыз. PDF ішінде шеңбер — қисық сызық,
- * оны оқу қиын әрі сенімсіз. Ал шеңбердің ішінде цифр жазылған, ал цифрдың
- * орны PDF-те дәл көрсетілген. ZipGrade цифрды шеңбердің дәл ортасына
- * қояды, сондықтан цифрдың ортасы = шеңбердің ортасы. Бес пачкада
- * тексерілді: көлденеңінен айырма 0.00 нүкте.
+ * оны оқу қиын әрі сенімсіз. Ал шеңбердің ішінде әріп не цифр жазылған,
+ * ал таңбаның орны PDF-те дәл көрсетілген. ZipGrade таңбаны шеңбердің дәл
+ * ортасына қояды, сондықтан таңбаның ортасы = шеңбердің ортасы. Бес
+ * пачкада тексерілді: көлденеңінен айырма 0.00 нүкте.
  */
 import * as pdfjsLib from "pdfjs-dist";
 
@@ -27,7 +32,7 @@ if (typeof window !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 }
 
-/** Цифрдың негізгі сызығынан шеңбердің ортасына дейін, қаріп өлшемінің үлесі. */
+/** Таңбаның негізгі сызығынан шеңбердің ортасына дейін, қаріп өлшемінің үлесі. */
 const BUBBLE_CENTER_K = 0.357;
 /** Шеңбердің радиусы — көрші шеңберлердің қашықтығының үлесі. */
 const RADIUS_K = 0.4;
@@ -38,6 +43,9 @@ const RADIUS_K = 0.4;
  * толық.
  */
 export const FILL_RADIUS_K = 0.85;
+
+export const LETTERS = ["A", "B", "C", "D"] as const;
+export type Letter = (typeof LETTERS)[number];
 
 export type SheetPageIndex = {
   /** ZipGrade ID — бес цифр. */
@@ -54,6 +62,19 @@ export type SheetPackIndex = {
   pageCount: number;
   questionCount: number;
   pages: SheetPageIndex[];
+};
+
+/** Бір сұрақтың төрт шеңбері. */
+export type KeyRow = { n: number; bubbles: [number, number][] };
+
+export type KeyTemplateIndex = {
+  questionCount: number;
+  /** «Нұсқа» шеңберлері. */
+  variantBubbles: [number, number][];
+  variantR: number;
+  /** Сұрақтардың шеңберлері, нөмірі бойынша реттелген. */
+  rows: KeyRow[];
+  r: number;
 };
 
 type Item = { s: string; x: number; y: number; w: number; size: number };
@@ -73,6 +94,11 @@ function toItems(content: any): Item[] {
     });
   }
   return items;
+}
+
+/** Таңбаның ортасы = шеңбердің ортасы. */
+function centerOf(i: Item): [number, number] {
+  return [i.x + i.w / 2, i.y + i.size * BUBBLE_CENTER_K];
 }
 
 /**
@@ -98,10 +124,7 @@ function findVariantBubbles(items: Item[]): { bubbles: [number, number][]; r: nu
     .sort((a, b) => a.x - b.x);
   if (row.length < 2) return null;
 
-  const centers: [number, number][] = row.map((i) => [
-    i.x + i.w / 2,
-    i.y + i.size * BUBBLE_CENTER_K,
-  ]);
+  const centers = row.map(centerOf);
 
   const step = centers[1][0] - centers[0][0];
   const run: [number, number][] = [centers[0]];
@@ -116,6 +139,9 @@ function findVariantBubbles(items: Item[]): { bubbles: [number, number][]; r: nu
  * Student ID — тордың үстіндегі ірі цифрлар. Олар бір бөлік болып
  * («7 1 0 5 2») та, бөлек-бөлек те келуі мүмкін, екеуі де өңделеді.
  * Тордың өз цифрлары кіші, сондықтан ең ірісін ғана аламыз.
+ *
+ * Бос бланкте ірі цифрлар мүлде болмайды — сонда null қайтады, және
+ * дәл осымен оқушылық парақ пен кілт үлгісі ажыратылады.
  */
 function findId(items: Item[]): string | null {
   const lbl = items.find((i) => i.s === "Student ID" || i.s === "ID");
@@ -128,6 +154,9 @@ function findId(items: Item[]): string | null {
   if (band.length === 0) return null;
 
   const biggest = Math.max(...band.map((i) => i.size));
+  // Тордың цифрлары мен сұрақ нөмірлері кіші: 10 нүкте. ID-дікі — 15.
+  if (biggest < 12) return null;
+
   const id = band
     .filter((i) => i.size > biggest - 0.01)
     .sort((a, b) => a.x - b.x)
@@ -142,6 +171,41 @@ function findId(items: Item[]): string | null {
  */
 function countQuestions(items: Item[]): number {
   return items.filter((i) => i.s === "A").length;
+}
+
+/**
+ * Жауап шеңберлері. Әр «A» әрпінен бастап сол қатардағы келесі үшеуін
+ * аламыз (B, C, D), ал сұрақтың нөмірі — сол жақтағы ең жақын сан.
+ * Парақ бірнеше бағанға бөлінген, сондықтан «сол қатар» деген биіктігі
+ * бірдей дегенді білдіреді, ал бағанның шекарасын әріптердің реті шешеді.
+ */
+function findAnswerRows(items: Item[]): { rows: KeyRow[]; r: number } | null {
+  const letters = items.filter((i) => /^[A-D]$/.test(i.s));
+  const numbers = items.filter((i) => /^[0-9]{1,3}$/.test(i.s));
+
+  const rows: KeyRow[] = [];
+  let step = 0;
+
+  for (const a of letters.filter((i) => i.s === "A")) {
+    const group = letters
+      .filter((l) => Math.abs(l.y - a.y) < 1 && l.x >= a.x - 0.5 && l.x < a.x + 70)
+      .sort((p, q) => p.x - q.x)
+      .slice(0, 4);
+    if (group.length < 4) continue;
+    if (group.map((g) => g.s).join("") !== "ABCD") continue;
+
+    const num = numbers
+      .filter((n) => Math.abs(n.y - a.y) < 3 && n.x < a.x && a.x - n.x < 40)
+      .sort((p, q) => q.x - p.x)[0];
+    if (!num) continue;
+
+    step = group[1].x - group[0].x;
+    rows.push({ n: Number(num.s), bubbles: group.map(centerOf) });
+  }
+
+  if (rows.length === 0 || step <= 0) return null;
+  rows.sort((p, q) => p.n - q.n);
+  return { rows, r: step * RADIUS_K };
 }
 
 /** Пачканы талдап, беттердің көрсеткішін қайтарады. */
@@ -181,6 +245,50 @@ export async function parseAnswerSheetPack(
   }
 
   return { pageCount: doc.numPages, questionCount, pages };
+}
+
+/** Кілт үлгісін (бос парақты) талдау. */
+export async function parseKeyTemplate(file: File | ArrayBuffer): Promise<KeyTemplateIndex> {
+  const source = file instanceof ArrayBuffer ? file : await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(source.slice(0)) }).promise;
+
+  if (doc.numPages !== 1) {
+    throw new Error(
+      `Үлгіде ${doc.numPages} бет бар. Кілт үлгісі — тізімсіз БІР бос парақ, оқушылар пачкасы емес.`
+    );
+  }
+
+  const items = toItems(await (await doc.getPage(1)).getTextContent());
+
+  if (findId(items)) {
+    throw new Error("Бұл парақта ZipGrade ID толтырылған — бұл оқушының парағы, кілт үлгісі емес.");
+  }
+
+  const v = findVariantBubbles(items);
+  if (!v) throw new Error("Парақтан «Нұсқа» шеңберлері табылмады.");
+
+  const a = findAnswerRows(items);
+  if (!a) throw new Error("Парақтан жауап шеңберлері табылмады.");
+
+  const expected = countQuestions(items);
+  const numbers = a.rows.map((r) => r.n);
+  const ok =
+    a.rows.length === expected &&
+    numbers.every((n, i) => n === i + 1) &&
+    new Set(numbers).size === numbers.length;
+  if (!ok) {
+    throw new Error(
+      `Сұрақтардың нөмірленуі оқылмады: ${a.rows.length} қатар табылды, күтілгені 1-ден ${expected}-ге дейін.`
+    );
+  }
+
+  return {
+    questionCount: expected,
+    variantBubbles: v.bubbles,
+    variantR: v.r,
+    rows: a.rows,
+    r: a.r,
+  };
 }
 
 /** Пачкада жоқ оқушылардың ID-лері. */
