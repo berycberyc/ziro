@@ -23,9 +23,8 @@ import { SUBJECT_MAX_COUNT } from "@/lib/questions/subjects";
  * жолға жазып жіберу оңай, сондықтан парақты толық енгізіп, көзбен
  * шолып шыққаннан кейін ғана сақталады.
  *
- * Қаріп — моноширинді. Парақтағы сегментті цифрлар балаға жазуға арналған,
- * ал мұнда керісінше — сверять керек, ал ондай қаріпте 5 пен 6, 8 бен 0
- * бір-біріне ұқсас.
+ * Қаріп — қағаз парақтағымен бірдей сегментті цифрлар
+ * (public/fonts/seven-segment.ttf), солға тураланған.
  */
 
 type Row = {
@@ -339,7 +338,10 @@ export default function RfmshEntryPage() {
                         inputMode="numeric"
                         autoComplete="off"
                         maxLength={MAX_DIGITS}
-                        className="focus-ring w-full rounded-md bg-parchment/60 px-3 py-1.5 text-center font-mono text-lg tracking-[0.15em] text-ink"
+                        // Қаріп парақтағы цифрлармен бірдей, ал мәтін СОЛҒА
+                        // тураланған: қағазда да сан бірінші ұяшықтан
+                        // басталады, көз бір жерден іздейді.
+                        className="focus-ring font-segment w-full rounded-md bg-parchment/60 px-3 py-1.5 text-left text-xl tracking-[0.2em] text-ink"
                       />
                     </div>
                   ))}

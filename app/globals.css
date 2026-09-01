@@ -7,6 +7,22 @@
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Жауап парағындағы цифрлармен бірдей қаріп — РФМШ жауаптарын қолмен
+   енгізу экраны үшін. Қағаздан экранға көшкенде көз бір пішінді көреді.
+   Тек цифрлар керек: қаріпте кириллица жоқ, сондықтан ол басқа жерде
+   қолданылмайды. */
+@font-face {
+  font-family: "Seven Segment";
+  src: url("/fonts/seven-segment.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-segment {
+  font-family: "Seven Segment", var(--font-mono), monospace;
+}
+
 html {
   scroll-behavior: smooth;
 }
