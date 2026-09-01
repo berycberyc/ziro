@@ -457,6 +457,12 @@ export default function AdminSessionDetailPage() {
           Нәтиже дайын: {session.has_results ? "Иә" : "Жоқ"}
         </button>
         <a
+          href={`/admin/sessions/${session.id}/rfmsh`}
+          className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-sm font-medium text-ink/70 hover:bg-parchment"
+        >
+          РФМШ жауаптары
+        </a>
+        <a
           href={`/admin/sessions/${session.id}/results-preview`}
           className="focus-ring rounded-full border border-ink/15 px-4 py-2 text-sm font-medium text-ink/70 hover:bg-parchment"
         >
