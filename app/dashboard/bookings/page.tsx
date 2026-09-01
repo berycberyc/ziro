@@ -559,7 +559,11 @@ export default function BookingsPage() {
                     left: "-3000px",
                     top: 0,
                     width: "800px",
-                    height: "1131px",
+                    // Бекітілген биіктік емес, ЕҢ АЗ биіктік. Пропуск A4
+                    // пропорциясында қалады, ал мазмұны сыймай қалса — бет
+                    // созылады. Бұрын height тұрғанда астыңғы ескертпе
+                    // қиылып қалатын: html2canvas тек осы биіктікті түсіреді.
+                    minHeight: "1131px",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
