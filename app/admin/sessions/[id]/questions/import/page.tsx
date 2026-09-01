@@ -190,8 +190,10 @@ export default function ImportQuestionsPage() {
               session_id: sessionId,
               subject,
               variant_number: variant,
-              passage_text_kk: p.text,
-              passage_text_ru: p.text,
+              passage_text_kk: p.text_kk,
+              // Бір тілді пәндерде орысша бөлік болмайды — сонда қазақшасы
+              // екеуіне де жазылады, бұрынғыдай.
+              passage_text_ru: p.text_ru.trim() ? p.text_ru : p.text_kk,
               order_number: p.index,
             }))
           )

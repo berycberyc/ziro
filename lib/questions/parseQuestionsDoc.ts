@@ -57,7 +57,12 @@ export type ParsedQuestion = {
   passage_index: number | null;
 };
 
-export type ParsedPassage = { index: number; text: string };
+/**
+ * Оқылым мәтіні. БИЛ-де ол екі тілде беріледі ([Мәтін 1] ішінде [kk] мен
+ * [ru]), тілдерде — бір тілде ғана. Сондықтан екі өріс, ал бір тілді
+ * пәндерде text_ru бос қалады.
+ */
+export type ParsedPassage = { index: number; text_kk: string; text_ru: string };
 
 export type ParseResult = {
   sessionTitle: string;
@@ -113,6 +118,10 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
   let current: ParsedQuestion | null = null;
   let lang: "kk" | "ru" = "kk";
   let passageIndex: number | null = null;
+  // Мәтіннің ішіндегі ағымдағы тіл. Сұрақтардың lang-ынан бөлек жүреді:
+  // мәтін де, сұрақ та [kk]/[ru] тегтерін қолданады, бірақ олар бір-біріне
+  // араласпауы керек.
+  let passageLang: "kk" | "ru" = "kk";
   let collectingPassage: ParsedPassage | null = null;
 
   const push = () => {
@@ -123,7 +132,13 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
   const addText = (value: string) => {
     if (!value) return;
     if (collectingPassage) {
-      collectingPassage.text += (collectingPassage.text ? "\n" : "") + value;
+      if (passageLang === "ru" && !isMono) {
+        collectingPassage.text_ru +=
+          (collectingPassage.text_ru ? "\n" : "") + value;
+      } else {
+        collectingPassage.text_kk +=
+          (collectingPassage.text_kk ? "\n" : "") + value;
+      }
       return;
     }
     if (!current) return;
@@ -185,7 +200,8 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
       if (!allowsPassages) {
         errors.push(`${SUBJECT_LABELS[subject]} пәнінде оқылым мәтіні болмауы керек ([${tag}]).`);
       }
-      collectingPassage = { index: pn, text: rest };
+      collectingPassage = { index: pn, text_kk: rest, text_ru: "" };
+      passageLang = "kk";
       passages.push(collectingPassage);
       passageIndex = pn;
       continue;
@@ -221,15 +237,16 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
     }
 
     if (isTag(tag, "kk", "қаз", "каз")) {
-      collectingPassage = null;
-      lang = "kk";
+      // Мәтін жиналып жатса — бұл мәтіннің қазақша бөлігі, сұрақтікі емес.
+      if (collectingPassage) passageLang = "kk";
+      else lang = "kk";
       if (rest) addText(rest);
       continue;
     }
 
     if (isTag(tag, "ru", "рус")) {
-      collectingPassage = null;
-      lang = "ru";
+      if (collectingPassage) passageLang = "ru";
+      else lang = "ru";
       if (rest) addText(rest);
       continue;
     }
@@ -345,6 +362,14 @@ export function parseQuestionsDocument(lines: string[], subject: SubjectKey): Pa
   // Жетпей тұрған нөмірлер
   for (let n = 1; n <= expected; n++) {
     if (!seen.has(n)) errors.push(`${n}-сұрақ файлда жоқ.`);
+  }
+
+  for (const p of passages) {
+    if (!p.text_kk.trim() && !p.text_ru.trim()) {
+      errors.push(`[Мәтін ${p.index}] бос — оқылатын мәтін жазылмаған.`);
+    } else if (!isMono && !p.text_ru.trim()) {
+      warnings.push(`[Мәтін ${p.index}] орысша нұсқасы жоқ — қазақшасы қойылады.`);
+    }
   }
 
   return {

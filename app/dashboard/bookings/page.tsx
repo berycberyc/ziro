@@ -515,17 +515,38 @@ export default function BookingsPage() {
                 </Link>
               )}
 
+              {/* Онлайн тестке кіру.
+                  Бұрын түйме тек тест ашылғанда пайда болатын, ал оған дейін
+                  ата-ана бетте ЕШТЕҢЕ көрмейтін: қашан және қайдан кіретіні
+                  белгісіз еді. Ешқандай хабарлама да жіберілмейді. Сондықтан
+                  күту кезеңінде де осы жерде уақыты мен тәртібі тұрады —
+                  ата-ана нені күтетінін біледі, ал тест күні дәл сол жерде
+                  түйме пайда болады. */}
               {b.format === "online" &&
                 b.payment_status === "paid" &&
-                b.session?.is_checking &&
                 !b.session?.has_results && (
                   <div className="border-t border-ink/10 px-5 py-4">
-                    <Link
-                      href="/kiru"
-                      className="focus-ring inline-flex items-center gap-2 rounded-full bg-teacher px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-                    >
-                      {t.startOnlineTest}
-                    </Link>
+                    {b.session?.is_checking ? (
+                      <Link
+                        href="/kiru"
+                        className="focus-ring inline-flex items-center gap-2 rounded-full bg-teacher px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+                      >
+                        {t.startOnlineTest}
+                      </Link>
+                    ) : (
+                      <div className="rounded-xl bg-ink/[0.04] px-4 py-3">
+                        <p className="text-sm font-semibold text-ink">{t.onlineEntryTitle}</p>
+                        <p className="mt-1 text-sm text-ink/70">
+                          {t.onlineEntryWhen}:{" "}
+                          <span className="font-mono font-semibold text-ink">
+                            {b.session?.session_date}
+                            {b.session?.start_time ? `, ${b.session.start_time}` : ""}
+                          </span>
+                        </p>
+                        <p className="mt-1.5 text-xs text-ink/55">{t.onlineEntryWaiting}</p>
+                        <p className="mt-1 text-xs text-ink/55">{t.onlineEntryWhere}</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -668,7 +689,8 @@ export default function BookingsPage() {
                   <div style={{ marginTop: "32px", width: "100%", padding: "18px 22px", background: "#F3F5F2", borderRadius: "14px", fontSize: "13.5px", lineHeight: 1.7, color: "#5a5a5a" }}>
                     {b.format === "online" ? (
                       <>
-                        <p style={{ margin: 0 }}>{t.passOnlineNote1}</p>
+                        <p style={{ margin: 0 }}>{t.passOnlineNote3}</p>
+                        <p style={{ margin: "6px 0 0 0" }}>{t.passOnlineNote1}</p>
                         <p style={{ margin: "6px 0 0 0" }}>{t.passOnlineNote2}</p>
                       </>
                     ) : (
