@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Manrope, IBM_Plex_Mono } from "next/font/google";
 import { LangProvider } from "@/lib/LangContext";
 import "katex/dist/katex.min.css";
@@ -49,6 +50,19 @@ export default function RootLayout({
 }) {
   return (
     <html lang="kk">
+      {/* Google Analytics */}
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=G-WHGVYW7YVG"
+        strategy="afterInteractive"
+      />
+      <Script id="google-analytics" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-WHGVYW7YVG');
+        `}
+      </Script>
       <body className={`${manropeDisplay.variable} ${manrope.variable} ${plexMono.variable} font-body`}>
         <LangProvider>{children}</LangProvider>
         <script
