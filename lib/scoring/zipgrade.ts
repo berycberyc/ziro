@@ -40,6 +40,24 @@ function cell(row: any, name: string): string {
   return String(v).trim();
 }
 
+/**
+ * StudentID-ді бес таңбаға дейін нөлмен толықтыру.
+ *
+ * Неге керек. Базадағы zipgrade_id — бес цифр, алдыңғы нөлдерімен қоса
+ * (lpad(..., 5, '0'), 014-миграция). ZipGrade экспортында бұл баған САН
+ * болып келеді, ал Excel сандағы алдыңғы нөлді тастап кетеді: 06531
+ * оқылғанда 6531 болып шығады.
+ *
+ * Салдары көрінбейтін: жүйе ондай оқушыны таппайды, парақ жоқ ID-мен
+ * жазылады, нәтижесінде бала жарияланған нәтижеге мүлде кірмейді, ал
+ * кестеде аты-жөні бос жолмен тұрады. Сондықтан цифрдан тұратын, бес
+ * таңбадан қысқа ID нөлмен толықтырылады.
+ */
+function normalizeId(raw: string): string {
+  if (!/^[0-9]+$/.test(raw)) return raw;
+  return raw.length < 5 ? raw.padStart(5, "0") : raw;
+}
+
 export function parseZipGradeFile(buffer: ArrayBuffer): ParsedFile {
   const wb = XLSX.read(buffer, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -60,7 +78,7 @@ export function parseZipGradeFile(buffer: ArrayBuffer): ParsedFile {
         zipKey[i] = cell(r, `PriKey${i}`).toUpperCase();
       }
       return {
-        zipgrade_id: cell(r, "StudentID"),
+        zipgrade_id: normalizeId(cell(r, "StudentID")),
         variant_number: parseInt(cell(r, "Key Version") || "1", 10) || 1,
         answers,
         zipKey,
