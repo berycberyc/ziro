@@ -187,7 +187,15 @@ export default function Home() {
                       : t.registrationClosed}
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 flex-wrap justify-end">
+                  {s.hasResults && (
+                    <Link
+                      href={`/result/${s.sessionId}`}
+                      className="focus-ring rounded-full border border-parent px-4 py-2.5 text-sm font-semibold text-parent hover:bg-parent-soft"
+                    >
+                      {lang === "kk" ? "Нәтижелер" : "Результаты"}
+                    </Link>
+                  )}
                   <span className="font-display text-lg font-bold text-gold-deep">
                     {s.price.toLocaleString("ru-RU")} ₸
                   </span>

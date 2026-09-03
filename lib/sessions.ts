@@ -9,12 +9,13 @@ export type SessionSummary = {
   price: number;
   registrationOpensAt: string | null;
   registrationClosesAt: string | null;
+  hasResults: boolean;
 };
 
 export async function getUpcomingSessions(): Promise<SessionSummary[]> {
   const { data, error } = await supabase
     .from("test_sessions")
-    .select("id, title_kk, title_ru, session_date, address, price, registration_opens_at, registration_closes_at, is_active")
+    .select("id, title_kk, title_ru, session_date, address, price, registration_opens_at, registration_closes_at, is_active, has_results")
     .eq("is_active", true)
     .order("session_date", { ascending: true });
 
@@ -29,6 +30,7 @@ export async function getUpcomingSessions(): Promise<SessionSummary[]> {
     price: s.price,
     registrationOpensAt: s.registration_opens_at,
     registrationClosesAt: s.registration_closes_at,
+    hasResults: s.has_results ?? false,
   }));
 }
 
