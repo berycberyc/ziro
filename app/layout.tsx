@@ -50,6 +50,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="kk">
+      {/* Google Search Console */}
+      <meta name="google-site-verification" content="rmvYBT4SaAmKV1KI2rZyDvEGoOqlrDjBnWdbsjoQDMc" />
+
       {/* Google Analytics */}
       <Script
         src="https://www.googletagmanager.com/gtag/js?id=G-WHGVYW7YVG"
