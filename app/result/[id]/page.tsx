@@ -35,8 +35,8 @@ const NIS_COLS = [
 ];
 
 const BIL_COLS = [
-  { key: "math", label: "Математика" },
-  { key: "reading", label: "Оқу" },
+  { key: "bil_math", label: "Математика" },
+  { key: "bil_reading", label: "Оқу" },
 ];
 
 const CODE_LABELS: Record<string, string> = {
