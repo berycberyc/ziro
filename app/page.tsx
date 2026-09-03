@@ -171,6 +171,7 @@ export default function Home() {
             const isOpen =
               (!s.registrationOpensAt || today >= s.registrationOpensAt) &&
               (!s.registrationClosesAt || today <= s.registrationClosesAt);
+            const isUpcoming = !isOpen && s.registrationOpensAt && today < s.registrationOpensAt;
             return (
               <div
                 key={s.sessionId}
@@ -184,6 +185,10 @@ export default function Home() {
                   <p className="mt-1 font-mono text-xs text-ink/40">
                     {isOpen
                       ? `${t.registrationWindowLabel}: ${s.registrationOpensAt ?? "—"} — ${s.registrationClosesAt ?? "—"}`
+                      : isUpcoming
+                      ? (lang === "kk"
+                          ? `Тіркеу басталады: ${s.registrationOpensAt}`
+                          : `Регистрация откроется: ${s.registrationOpensAt}`)
                       : t.registrationClosed}
                   </p>
                 </div>
