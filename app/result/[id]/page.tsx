@@ -29,9 +29,9 @@ const NIS_COLS = [
   { key: "math", label: "Мат-лог" },
   { key: "sandyq", label: "Сандық" },
   { key: "zharatylystanu", label: "Жарат." },
-  { key: "tilder", label: "Тілдер" },
-  { key: "bil_math", label: "Мат-лог" },
-  { key: "bil_reading", label: "Оқу" },
+  { key: "tilder_kk", label: "Тіл-Қаз" },
+  { key: "tilder_ru", label: "Тіл-Орыс" },
+  { key: "tilder_en", label: "Тіл-Ағыл" },
 ];
 
 const BIL_COLS = [
