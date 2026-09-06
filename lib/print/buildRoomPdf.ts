@@ -55,6 +55,13 @@ export function printFileKey(subject: string, variant: number, lang: string): Pr
 /** Бір пәннің пачкасы: файлдың өзі және жүктеу кезінде жасалған көрсеткіш. */
 export type SheetPack = { bytes: ArrayBuffer; pages: SheetPageIndex[] };
 
+/** Реестр раздачи — диапазоны страниц по каждому ученику и предмету. */
+export type RegistryRow = {
+  seat: string;
+  fullName: string;
+  subjects: { subject: SubjectKey; from: number; to: number }[];
+};
+
 const A4 = { width: 595.28, height: 841.89 };
 
 /** Шеттен қалдырылатын алаң. */
@@ -77,7 +84,7 @@ export async function buildRoomPdf(opts: {
   sheets: Map<SubjectKey, SheetPack>;
   /** Прогресс: қанша оқушы дайын болды */
   onProgress?: (done: number, total: number) => void;
-}): Promise<Blob> {
+}): Promise<{ pdf: Blob; registry: RegistryRow[] }> {
   const { sessionTitle, sessionDate, students, files, sheets, onProgress } = opts;
 
   const out = await PDFDocument.create();
@@ -95,6 +102,10 @@ export async function buildRoomPdf(opts: {
     }
     return rfmshSheet;
   };
+
+  let pageNum = 0;
+  const addBlankPage = () => { out.addPage([A4.width, A4.height]); pageNum++; };
+  const registry: RegistryRow[] = [];
 
   // Бір PDF-ті бірнеше оқушы қолданады — қайта-қайта оқымау үшін кэш.
   const loaded = new Map<PrintFileKey, PDFDocument>();
@@ -122,10 +133,13 @@ export async function buildRoomPdf(opts: {
   for (let i = 0; i < students.length; i++) {
     const st = students[i];
 
+    const registryRow: RegistryRow = { seat: st.seat, fullName: st.fullName, subjects: [] };
+
     for (const subject of st.subjects) {
+      const subjectFrom = pageNum + 1;
       // ---- 1. жауап парағы ----
       if (subject === "rfmsh") {
-        const page = out.addPage([A4.width, A4.height]);
+        const page = out.addPage([A4.width, A4.height]); pageNum++;
         drawHeader(page, font, logo, { sessionTitle, sessionDate, subject, student: st });
         drawRfmshSheet(page, await getRfmshSheet());
       } else {
@@ -138,7 +152,7 @@ export async function buildRoomPdf(opts: {
           );
         }
         const [embedded] = await out.embedPdf(packDoc, [entry.page]);
-        const page = out.addPage([A4.width, A4.height]);
+        const page = out.addPage([A4.width, A4.height]); pageNum++;
 
         // Парақ бір коэффициентпен кішірейеді де, беттің ТӨМЕНГІ шетіне
         // тіреледі: бос орынның бәрі жоғарыда жиналады, шапка сонда
@@ -164,26 +178,28 @@ export async function buildRoomPdf(opts: {
       }
 
       // ---- 2. парақтың сырты таза қалсын ----
-      out.addPage([A4.width, A4.height]);
+      addBlankPage();
 
       // ---- 3. сұрақ беттері ----
-      // Тілдер бір тілде — файл әрқашан 'kk' болып сақталады.
       const key = printFileKey(subject, st.variant, st.lang);
       const doc = (await getDoc(key)) ?? (await getDoc(printFileKey(subject, st.variant, "kk")));
-      if (!doc) continue; // тексеру бұған дейін өтеді, бұл сақтық шарасы
+      if (doc) {
+        const docPages = await out.copyPages(doc, doc.getPageIndices());
+        docPages.forEach((p) => { out.addPage(p); pageNum++; });
+        if (docPages.length % 2 === 1) addBlankPage();
+      }
 
-      const pages = await out.copyPages(doc, doc.getPageIndices());
-      pages.forEach((p) => out.addPage(p));
-
-      // ---- 4. келесі пән жаңа қағаздан басталсын ----
-      if (pages.length % 2 === 1) out.addPage([A4.width, A4.height]);
+      registryRow.subjects.push({ subject, from: subjectFrom, to: pageNum });
     }
+
+    registry.push(registryRow);
 
     onProgress?.(i + 1, students.length);
   }
 
   const bytes = await out.save();
-  return new Blob([bytes as BlobPart], { type: "application/pdf" });
+  const pdf = new Blob([bytes as BlobPart], { type: "application/pdf" });
+  return { pdf, registry };
 }
 
 /**

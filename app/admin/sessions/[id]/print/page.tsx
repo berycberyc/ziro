@@ -13,7 +13,8 @@ import {
   MONOLINGUAL_SUBJECTS,
   type SubjectKey,
 } from "@/lib/questions/subjects";
-import { buildRoomPdf, printFileKey, type RoomStudent, type SheetPack } from "@/lib/print/buildRoomPdf";
+import { buildRoomPdf, printFileKey, type RoomStudent, type SheetPack, type RegistryRow } from "@/lib/print/buildRoomPdf";
+import { buildRegistryPdf } from "@/lib/print/buildRegistryPdf";
 import {
   parseAnswerSheetPack,
   parseKeyTemplate,
@@ -537,7 +538,7 @@ export default function PrintRoomsPage() {
         sheetsMap.set(sn.subject, { bytes: await res.arrayBuffer(), pages: sn.pack.pages });
       }
 
-      const blob = await buildRoomPdf({
+      const { pdf, registry } = await buildRoomPdf({
         sessionTitle,
         sessionDate,
         classroom: selectedRoom,
@@ -547,11 +548,27 @@ export default function PrintRoomsPage() {
         onProgress: (done, total) => setProgress(`${done} / ${total} оқушы`),
       });
 
+      // Негізгі PDF
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = URL.createObjectURL(pdf);
       a.download = `auditoriya-${selectedRoom}.pdf`;
       a.click();
       URL.revokeObjectURL(a.href);
+
+      // Реестр — бірден екінші файл
+      const allSubjects = [...new Set(roomStudents.flatMap((s) => s.subjects))];
+      const regBlob = await buildRegistryPdf({
+        sessionTitle,
+        sessionDate,
+        classroom: selectedRoom,
+        rows: registry,
+        subjects: allSubjects,
+      });
+      const b = document.createElement("a");
+      b.href = URL.createObjectURL(regBlob);
+      b.download = `reestr-${selectedRoom}.pdf`;
+      b.click();
+      URL.revokeObjectURL(b.href);
       setProgress("");
     } catch (err: any) {
       console.error(err);
