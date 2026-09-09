@@ -32,8 +32,17 @@ export default function RegisterPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-parchment px-6 text-center">
         <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 shadow-lg">
-          <h1 className="font-display text-2xl font-bold text-ink">{t.checkEmailTitle}</h1>
-          <p className="mt-4 text-sm text-ink/70">{t.checkEmailBody}</p>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-parent/10 text-3xl">
+            ✓
+          </div>
+          <h1 className="font-display text-2xl font-bold text-ink">{(t as any).checkEmailTitle}</h1>
+          <p className="mt-3 text-sm text-ink/70">{(t as any).checkEmailBody}</p>
+          <a
+            href="/login"
+            className="mt-6 inline-block rounded-full bg-parent px-8 py-3 text-sm font-semibold text-white hover:opacity-90"
+          >
+            {(t as any).checkEmailLogin}
+          </a>
         </div>
       </div>
     );
