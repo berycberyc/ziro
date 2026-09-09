@@ -51,6 +51,7 @@ export default function RegisterPage() {
   return (
     <AuthForm
       title={t.registerTitle}
+      subtitle={(t as any).registerSubtitle}
       submitLabel={t.registerSubmit}
       errorText={t.authError}
       footerText={t.haveAccount}

@@ -28,6 +28,7 @@ export default function AuthForm({
   footerLinkHref,
   footerLinkLabel,
   belowFormLink,
+  subtitle,
 }: {
   title: string;
   fields: AuthField[];
@@ -39,6 +40,7 @@ export default function AuthForm({
   footerLinkLabel: string;
   /** Форманың астындағы қосымша сілтеме — «Құпия сөзді ұмыттыңыз ба?». */
   belowFormLink?: { href: string; label: string };
+  subtitle?: string;
 }) {
   const { lang, setLang } = useLang();
   const [values, setValues] = useState<Record<string, string>>({});
@@ -73,6 +75,9 @@ export default function AuthForm({
 
       <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-8 shadow-lg">
         <h1 className="font-display text-2xl font-bold text-ink">{title}</h1>
+        {subtitle && (
+          <p className="mt-1 text-sm text-ink/55">{subtitle}</p>
+        )}
         <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
           {fields.map((f) => (
             <div key={f.name}>
