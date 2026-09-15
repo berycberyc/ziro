@@ -1,4 +1,4 @@
--- Full test-data wipe. Keeps ONLY profiles with role admin/teacher (and
+-- Full test-data wipe. Keeps ONLY profiles with role admin/teacher/accountant (and
 -- their auth.users rows). Everything else — parents, students, bookings,
 -- trial tests, questions, topics, passages — is deleted.
 -- Cascade foreign keys already in the schema clean up the rest for us:
@@ -9,11 +9,11 @@
 -- Run this in Supabase SQL Editor. Irreversible — make sure you actually
 -- want to wipe everything before running.
 
--- 1) Remove every non-admin/non-teacher user. Cascades away their
+-- 1) Remove every non-admin/non-teacher/non-accountant user. Cascades away their
 --    profiles, students, registrations, and test_attempts automatically.
 delete from auth.users
 where id in (
-  select id from profiles where role not in ('admin', 'teacher')
+  select id from profiles where role not in ('admin', 'teacher', 'accountant')
 );
 
 -- 2) Remove all trial tests. Cascades away any remaining registrations

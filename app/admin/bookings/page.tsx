@@ -11,7 +11,10 @@ type Booking = {
   payment_status: string;
   student_id: string;
   parent_id: string;
+  test_type_id: string;
   receipt_url: string | null;
+  payment_confirmed_by: string | null;
+  payment_confirmed_at: string | null;
   students: {
     full_name: string;
     iin: string | null;
@@ -30,7 +33,30 @@ type ParentDetail = {
   email: string | null;
 };
 
-type TrialTest = { id: string; title_kk: string; title_ru: string; session_date: string };
+type TrialTest = {
+  id: string;
+  title_kk: string;
+  title_ru: string;
+  session_date: string;
+  price: number;
+};
+
+function formatMoney(amount: number) {
+  return `${Math.round(amount).toLocaleString("ru-RU")} ₸`;
+}
+
+/**
+ * Астана уақыты (+05:00) — жобада уақыт бүкіл жерде осылай тіркелген.
+ * Браузердің уақыт белдеуіне сенбейміз: Қазақстан 2024 жылы белдеуін
+ * ауыстырды, ескі құрылғылар әлі +06:00 көрсетуі мүмкін.
+ */
+function formatAstanaTime(iso: string) {
+  const d = new Date(new Date(iso).getTime() + 5 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()} ${pad(
+    d.getUTCHours()
+  )}:${pad(d.getUTCMinutes())}`;
+}
 
 export default function BookingsPage() {
   const [trialTests, setTrialTests] = useState<TrialTest[]>([]);
@@ -41,13 +67,20 @@ export default function BookingsPage() {
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [detailParent, setDetailParent] = useState<ParentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  // Тест түрі бойынша жеке баға (session_test_types.price). Жоқ болса — сессия бағасы.
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
+  // Растаған адамның аты: profile id -> аты.
+  const [confirmerNames, setConfirmerNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     supabase
       .from("test_sessions")
-      .select("id, title_kk, title_ru, session_date")
+      .select("id, title_kk, title_ru, session_date, price")
       .order("session_date", { ascending: false })
-      .then(({ data }) => setTrialTests(data ?? []));
+      .then(({ data, error }) => {
+        if (error) console.error("Trial tests failed to load:", error);
+        setTrialTests((data as TrialTest[]) ?? []);
+      });
   }, []);
 
   const load = useCallback(async (testId: string) => {
@@ -58,7 +91,8 @@ export default function BookingsPage() {
           .from("registrations")
           .select(
             `
-            id, payment_status, student_id, parent_id, receipt_url,
+            id, payment_status, student_id, parent_id, test_type_id, receipt_url,
+            payment_confirmed_by, payment_confirmed_at,
             students ( full_name, iin, grade, region, city, school, language ),
             test_types ( name_kk, name_ru )
             `
@@ -69,6 +103,39 @@ export default function BookingsPage() {
           .range(from, to)
       );
       setBookings(data as any);
+
+      const { data: links, error: linksError } = await supabase
+        .from("session_test_types")
+        .select("test_type_id, price")
+        .eq("test_session_id", testId);
+      if (linksError) console.error("Test type prices failed to load:", linksError);
+      const overrides: Record<string, number> = {};
+      for (const row of links ?? []) {
+        if (row.price !== null && row.price !== undefined) {
+          overrides[row.test_type_id] = Number(row.price);
+        }
+      }
+      setPriceOverrides(overrides);
+
+      const confirmerIds = Array.from(
+        new Set(
+          (data as Booking[])
+            .map((b) => b.payment_confirmed_by)
+            .filter((id): id is string => !!id)
+        )
+      );
+      const names: Record<string, string> = {};
+      if (confirmerIds.length > 0) {
+        const { data: people, error: peopleError } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", confirmerIds);
+        if (peopleError) console.error("Confirmer names failed to load:", peopleError);
+        for (const p of people ?? []) {
+          names[p.id] = p.full_name?.trim() || p.email || "—";
+        }
+      }
+      setConfirmerNames(names);
     } catch (err) {
       console.error("Bookings failed to load:", err);
       setBookings([]);
@@ -82,8 +149,16 @@ export default function BookingsPage() {
 
   async function togglePayment(id: string, currentStatus: string) {
     const newStatus = currentStatus === "paid" ? "pending" : "paid";
-    await supabase.from("registrations").update({ payment_status: newStatus }).eq("id", id);
+    // Кім және қашан растағанын база өзі жазады (064 миграциясы).
+    const { error } = await supabase
+      .from("registrations")
+      .update({ payment_status: newStatus })
+      .eq("id", id);
     setPendingToggleId(null);
+    if (error) {
+      alert("Қате: " + error.message);
+      return;
+    }
     load(selectedTestId);
   }
 
@@ -101,6 +176,11 @@ export default function BookingsPage() {
 
   const unpaid = bookings.filter((b) => b.payment_status !== "paid");
   const paid = bookings.filter((b) => b.payment_status === "paid");
+
+  const sessionPrice = Number(trialTests.find((t) => t.id === selectedTestId)?.price ?? 0);
+  const amountOf = (b: Booking) => priceOverrides[b.test_type_id] ?? sessionPrice;
+  const unpaidTotal = unpaid.reduce((sum, b) => sum + amountOf(b), 0);
+  const paidTotal = paid.reduce((sum, b) => sum + amountOf(b), 0);
 
   /**
    * Түбіртек қоймасы жабық (057 миграциясы): тікелей сілтеме жұмыс істемейді,
@@ -126,7 +206,20 @@ export default function BookingsPage() {
             <p className="font-display font-semibold text-ink hover:underline">{b.students?.full_name}</p>
             <p className="text-sm text-ink/50">
               {b.test_types?.name_kk} / {b.test_types?.name_ru}
+              <span className="ml-2 font-mono font-semibold text-ink/80">
+                {formatMoney(amountOf(b))}
+              </span>
             </p>
+            {b.payment_status === "paid" && (
+              <p className="mt-0.5 text-xs text-ink/45">
+                {b.payment_confirmed_by
+                  ? `Растады: ${confirmerNames[b.payment_confirmed_by] ?? "—"}`
+                  : "Растаушы белгісіз"}
+                {b.payment_confirmed_at && (
+                  <span className="font-mono"> · {formatAstanaTime(b.payment_confirmed_at)}</span>
+                )}
+              </p>
+            )}
           </button>
 
           {b.receipt_url && (
@@ -220,6 +313,7 @@ export default function BookingsPage() {
           <div>
             <h2 className="mb-3 font-display text-sm font-bold uppercase tracking-wide text-clay">
               Төленбеген <span className="font-mono text-ink/40">({unpaid.length})</span>
+              <span className="ml-2 font-mono normal-case text-ink/60">{formatMoney(unpaidTotal)}</span>
             </h2>
             <div className="flex flex-col gap-2">
               {unpaid.map((b) => (
@@ -231,6 +325,7 @@ export default function BookingsPage() {
           <div>
             <h2 className="mb-3 font-display text-sm font-bold uppercase tracking-wide text-parent">
               Төленген <span className="font-mono text-ink/40">({paid.length})</span>
+              <span className="ml-2 font-mono normal-case text-ink/60">{formatMoney(paidTotal)}</span>
             </h2>
             <div className="flex flex-col gap-2">
               {paid.map((b) => (

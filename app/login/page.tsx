@@ -30,6 +30,10 @@ export default function LoginPage() {
         router.push("/admin");
         return;
       }
+      if (profile?.role === "accountant") {
+        router.push("/admin/bookings");
+        return;
+      }
       if (profile?.role === "teacher") {
         router.push("/teacher");
         return;
