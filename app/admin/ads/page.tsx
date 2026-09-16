@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { fetchAll } from "@/lib/fetchAll";
+import PeopleListModal, { type PeopleListRequest } from "@/components/AdsPeopleListModal";
 import { AD_CHANNELS, HEARD_FROM_OPTIONS, channelLabel, heardFromLabel } from "@/lib/sources";
 
 /**
@@ -14,12 +15,17 @@ import { AD_CHANNELS, HEARD_FROM_OPTIONS, channelLabel, heardFromLabel } from "@
  *
  * Сандар — АДАМ саны (ата-ана), брондау саны емес: бір ата-ана екі баласын
  * жазса да, «Брондады» бағанында бір рет саналады.
+ *
+ * Санды басқанда сол адамдардың тізімі ашылады (бір жол — бір брондау),
+ * оны Excel-ге жүктеуге болады.
  */
 
 type AdLink = { id: string; name: string; channel: string; campaign: string; created_at: string };
 type ParentRow = { id: string; utm_source: string | null; utm_campaign: string | null; heard_from: string | null };
 type RegRow = { id: string; parent_id: string; payment_status: string };
-type Funnel = { registered: number; booked: number; paid: number };
+/** Әр бағандағы ата-аналардың id тізімі; сан — тізім ұзындығы. */
+type Funnel = { registered: string[]; booked: string[]; paid: string[] };
+const emptyFunnel = (): Funnel => ({ registered: [], booked: [], paid: [] });
 
 const TRANSLIT: Record<string, string> = {
   а: "a", ә: "a", б: "b", в: "v", г: "g", ғ: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "i",
@@ -47,12 +53,45 @@ function linkUrl(l: AdLink): string {
   return `${origin}/?${params.toString()}`;
 }
 
-function StatCells({ f }: { f: Funnel }) {
+const METRIC_LABEL = { registered: "Кабинет ашты", booked: "Брондады", paid: "Төледі" } as const;
+type Metric = keyof typeof METRIC_LABEL;
+
+function StatCells({
+  f,
+  rowTitle,
+  onOpen,
+}: {
+  f: Funnel;
+  rowTitle: string;
+  onOpen: (req: PeopleListRequest) => void;
+}) {
+  const cell = (metric: Metric, strong = false) => {
+    const ids = f[metric];
+    return (
+      <td className="px-3 py-2.5 text-right">
+        {ids.length === 0 ? (
+          <span className="font-mono text-ink/40">0</span>
+        ) : (
+          <button
+            onClick={() =>
+              onOpen({ title: `${rowTitle} · ${METRIC_LABEL[metric]}`, parentIds: ids, onlyPaid: metric === "paid" })
+            }
+            title="Тізімді ашу"
+            className={`focus-ring rounded-md px-2 py-0.5 font-mono underline decoration-ink/25 underline-offset-4 hover:bg-gold/10 hover:decoration-gold ${
+              strong ? "font-semibold text-ink" : ""
+            }`}
+          >
+            {ids.length}
+          </button>
+        )}
+      </td>
+    );
+  };
   return (
     <>
-      <td className="px-3 py-2.5 text-right font-mono">{f.registered}</td>
-      <td className="px-3 py-2.5 text-right font-mono">{f.booked}</td>
-      <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink">{f.paid}</td>
+      {cell("registered")}
+      {cell("booked")}
+      {cell("paid", true)}
     </>
   );
 }
@@ -85,6 +124,7 @@ export default function AdsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [qrFor, setQrFor] = useState<{ link: AdLink; dataUrl: string } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [peopleList, setPeopleList] = useState<PeopleListRequest | null>(null);
 
   async function load() {
     setLoading(true);
@@ -129,11 +169,11 @@ export default function AdsPage() {
       bookedParents.add(r.parent_id);
       if (r.payment_status === "paid") paidParents.add(r.parent_id);
     }
-    const empty = (): Funnel => ({ registered: 0, booked: 0, paid: 0 });
+    const empty = emptyFunnel;
     const add = (f: Funnel, p: ParentRow) => {
-      f.registered++;
-      if (bookedParents.has(p.id)) f.booked++;
-      if (paidParents.has(p.id)) f.paid++;
+      f.registered.push(p.id);
+      if (bookedParents.has(p.id)) f.booked.push(p.id);
+      if (paidParents.has(p.id)) f.paid.push(p.id);
     };
 
     const knownCampaigns = new Set(links.map((l) => l.campaign));
@@ -215,7 +255,7 @@ export default function AdsPage() {
         <h1 className="font-display text-2xl font-bold text-admin">Жарнама</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink/60">
           Әр жарнамаға бөлек сілтеме жасаңыз. Ата-ана сол сілтемемен кіріп, 30 күн ішінде кабинет ашса, ол осы
-          кестеде көрінеді. Сандар — ата-ана саны.
+          кестеде көрінеді. Сандар — ата-ана саны. Санды басып, тізімін ашуға болады.
         </p>
       </div>
 
@@ -323,7 +363,7 @@ export default function AdsPage() {
                         )}
                       </div>
                     </td>
-                    <StatCells f={stats.byCampaign[l.campaign] ?? { registered: 0, booked: 0, paid: 0 }} />
+                    <StatCells f={stats.byCampaign[l.campaign] ?? emptyFunnel()} rowTitle={l.name} onOpen={setPeopleList} />
                   </tr>
                 ))}
                 {otherLinkKeys.map((k) => (
@@ -332,16 +372,16 @@ export default function AdsPage() {
                       <p className="text-ink">{k}</p>
                       <p className="text-xs text-ink/50">Мұнда жасалмаған сілтеме</p>
                     </td>
-                    <StatCells f={stats.otherLinks[k]} />
+                    <StatCells f={stats.otherLinks[k]} rowTitle={k} onOpen={setPeopleList} />
                   </tr>
                 ))}
                 <tr className="border-b border-ink/5">
                   <td className="px-3 py-2.5 text-ink/60">Сілтемесіз келгендер</td>
-                  <StatCells f={stats.noLink} />
+                  <StatCells f={stats.noLink} rowTitle="Сілтемесіз келгендер" onOpen={setPeopleList} />
                 </tr>
                 <tr className="bg-parchment/60">
                   <td className="px-3 py-2.5 font-semibold text-ink">Барлығы</td>
-                  <StatCells f={stats.total} />
+                  <StatCells f={stats.total} rowTitle="Барлығы" onOpen={setPeopleList} />
                 </tr>
               </tbody>
             </table>
@@ -361,7 +401,7 @@ export default function AdsPage() {
                 {heardKeys.map((k) => (
                   <tr key={k || "none"} className="border-b border-ink/5">
                     <td className={`px-3 py-2.5 ${k ? "text-ink" : "text-ink/50"}`}>{heardFromLabel(k)}</td>
-                    <StatCells f={stats.byHeard[k] ?? { registered: 0, booked: 0, paid: 0 }} />
+                    <StatCells f={stats.byHeard[k] ?? emptyFunnel()} rowTitle={heardFromLabel(k)} onOpen={setPeopleList} />
                   </tr>
                 ))}
               </tbody>
@@ -372,6 +412,10 @@ export default function AdsPage() {
 
       {/* 4. Telegram */}
       <TelegramSettings />
+
+      {peopleList && (
+        <PeopleListModal request={peopleList} links={links} onClose={() => setPeopleList(null)} />
+      )}
 
       {qrFor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setQrFor(null)}>
