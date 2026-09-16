@@ -4,12 +4,18 @@ import { useState } from "react";
 import { useLang } from "@/lib/LangContext";
 import { supabase } from "@/lib/supabase";
 import AuthForm from "@/components/AuthForm";
+import { HEARD_FROM_OPTIONS } from "@/lib/sources";
+import { readSavedUtm } from "@/lib/utm";
 
 export default function RegisterPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [registered, setRegistered] = useState(false);
 
   async function handleRegister(values: Record<string, string>) {
+    // Жарнама сілтемесімен келсе — белгісі (30 күн сақталады), және
+    // «Бізді қайдан білдіңіз?» жауабы. Екеуі де міндетті емес.
+    const utm = readSavedUtm();
+    const heardFrom = HEARD_FROM_OPTIONS.some((o) => o.value === values.heardFrom) ? values.heardFrom : "";
     const { error } = await supabase.auth.signUp({
       email: values.email,
       password: values.password,
@@ -19,6 +25,10 @@ export default function RegisterPage() {
           first_name: values.firstName,
           last_name: values.lastName,
           phone: values.phone,
+          heard_from: heardFrom,
+          utm_source: utm?.utm_source ?? "",
+          utm_medium: utm?.utm_medium ?? "",
+          utm_campaign: utm?.utm_campaign ?? "",
         },
       },
     });
@@ -63,6 +73,14 @@ export default function RegisterPage() {
         { name: "phone", type: "tel", label: t.phone },
         { name: "email", type: "email", label: t.email },
         { name: "password", type: "password", label: t.password },
+        {
+          name: "heardFrom",
+          type: "select",
+          label: lang === "kk" ? "Бізді қайдан білдіңіз?" : "Откуда вы о нас узнали?",
+          optional: true,
+          placeholder: lang === "kk" ? "Таңдаңыз" : "Выберите",
+          options: HEARD_FROM_OPTIONS.map((o) => ({ value: o.value, label: o[lang] })),
+        },
       ]}
       onSubmit={handleRegister}
     />

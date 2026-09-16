@@ -49,34 +49,38 @@ export default function KiruPage() {
         <p className="font-display text-lg font-bold text-ink/70">Вход в тест</p>
 
         <p className="mt-3 text-sm text-ink/60">
-          Рұқсат қағазыңыздағы брондау нөмірін және оқушы кодын енгізіңіз.
+          Рұқсат қағазыңыздағы Оқушы ID мен брондау нөмірін енгізіңіз.
         </p>
         <p className="mt-1 text-sm text-ink/50">
-          Введите номер брони и код ученика — они указаны в пропуске.
+          Введите ID ученика и номер брони — они указаны в пропуске.
         </p>
 
         <div className="mt-6 flex flex-col gap-3">
+          {/* Реті рұқсат қағазындағыдай: алдымен Оқушы ID, сосын брондау нөмірі. */}
           <input
             required
-            placeholder="Брондау нөмірі / Номер брони"
-            value={shortCode}
-            onChange={(e) => setShortCode(e.target.value)}
-            className="focus-ring rounded-xl border border-ink/15 px-4 py-2.5 font-mono text-sm uppercase"
-          />
-          <input
-            required
-            placeholder="Оқушы коды / Код ученика (5)"
+            autoFocus
+            placeholder="Оқушы ID / ID ученика"
+            aria-label="Оқушы ID / ID ученика"
             value={zipgradeId}
             onChange={(e) => setZipgradeId(e.target.value.replace(/[^\d]/g, ""))}
             inputMode="numeric"
             className="focus-ring rounded-xl border border-ink/15 px-4 py-2.5 font-mono text-sm"
           />
+          <input
+            required
+            placeholder="Брондау нөмірі / Номер брони"
+            aria-label="Брондау нөмірі / Номер брони"
+            value={shortCode}
+            onChange={(e) => setShortCode(e.target.value)}
+            className="focus-ring rounded-xl border border-ink/15 px-4 py-2.5 font-mono text-sm uppercase"
+          />
         </div>
 
         {error && (
           <div className="mt-3 text-sm text-red-600">
-            <p>Брондау нөмірі немесе оқушы коды дұрыс емес. Қайта тексеріп көріңіз.</p>
-            <p className="mt-1">Номер брони или код ученика неверный. Проверьте ещё раз.</p>
+            <p>Оқушы ID немесе брондау нөмірі дұрыс емес. Қайта тексеріп көріңіз.</p>
+            <p className="mt-1">ID ученика или номер брони неверный. Проверьте ещё раз.</p>
           </div>
         )}
 

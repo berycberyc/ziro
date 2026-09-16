@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Manrope, IBM_Plex_Mono } from "next/font/google";
 import { LangProvider } from "@/lib/LangContext";
+import UtmCapture from "@/components/UtmCapture";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -88,6 +89,7 @@ export default function RootLayout({
         `}
       </Script>
       <body className={`${manropeDisplay.variable} ${manrope.variable} ${plexMono.variable} font-body`}>
+        <UtmCapture />
         <LangProvider>{children}</LangProvider>
         <script
           dangerouslySetInnerHTML={{

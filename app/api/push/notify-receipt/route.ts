@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
+import { escapeHtml, loadBookingInfo, notifyTelegram } from "@/lib/telegram";
 
+/**
+ * Ата-ана төлем түбіртегін жібергенде шақырылады (041, pg_net триггері).
+ * Екі хабарлама жібереді: Telegram (065-тен бастап) және бұрынғы
+ * телефондағы push. Біреуі бапталмаса, екіншісі бәрібір жүреді.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!vapidPublic || !vapidPrivate || !supabaseUrl || !serviceRoleKey) {
-      console.error("notify-receipt: missing required env vars");
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("notify-receipt: missing supabase env vars");
       return NextResponse.json({ error: "server not configured" }, { status: 500 });
     }
-
-    webpush.setVapidDetails("mailto:gulzhanmin1@gmail.com", vapidPublic, vapidPrivate);
 
     // Uses the service-role key since this route is called server-to-server
     // by a database trigger (pg_net), not by a logged-in user — there's no
@@ -26,20 +28,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "registrationId required" }, { status: 400 });
     }
 
-    const { data: registration } = await supabaseAdmin
-      .from("registrations")
-      .select("id, students ( full_name )")
-      .eq("id", registrationId)
-      .single();
+    const info = await loadBookingInfo(supabaseAdmin, registrationId);
+    if (!info) return NextResponse.json({ sent: 0, telegram: 0 });
 
-    const studentName = (registration as any)?.students?.full_name ?? "Белгісіз оқушы";
+    const studentName = info.reg.students?.full_name ?? "Белгісіз оқушы";
+
+    // --- Telegram ---
+    const price = info.reg.test_sessions?.price;
+    const format = info.reg.format === "online" ? "Онлайн" : "Офлайн";
+    const telegramText = [
+      "💳 <b>Түбіртек жіберілді — растау керек</b>",
+      "",
+      `Оқушы: <b>${escapeHtml(studentName)}</b>`,
+      `Тест: ${escapeHtml(info.reg.test_types?.code ?? "—")} · ${format}`,
+      `Сессия: ${escapeHtml(info.reg.test_sessions?.title_kk ?? "—")}`,
+      price != null ? `Сомасы: ${Number(price).toLocaleString("ru-RU").replace(/,/g, " ")} теңге` : "",
+      `Ата-ана: ${escapeHtml(info.parent?.full_name ?? "—")}${info.parent?.phone ? `, ${escapeHtml(info.parent.phone)}` : ""}`,
+      "",
+      "Растау: zirotest.com/admin/bookings",
+    ]
+      .filter((l, i, arr) => !(l === "" && arr[i - 1] === ""))
+      .join("\n");
+    const telegram = await notifyTelegram(supabaseAdmin, telegramText);
+
+    // --- Push (телефондағы қосымша) ---
+    const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+    if (!vapidPublic || !vapidPrivate) {
+      return NextResponse.json({ sent: 0, telegram });
+    }
+
+    webpush.setVapidDetails("mailto:gulzhanmin1@gmail.com", vapidPublic, vapidPrivate);
 
     const { data: subscriptions } = await supabaseAdmin
       .from("push_subscriptions")
       .select("endpoint, p256dh, auth");
 
     if (!subscriptions || subscriptions.length === 0) {
-      return NextResponse.json({ sent: 0 });
+      return NextResponse.json({ sent: 0, telegram });
     }
 
     const payload = JSON.stringify({
@@ -64,7 +90,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ sent });
+    return NextResponse.json({ sent, telegram });
   } catch (err: any) {
     console.error("notify-receipt failed:", err);
     return NextResponse.json({ error: err?.message ?? "unknown error" }, { status: 500 });

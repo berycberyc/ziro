@@ -7,8 +7,14 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export type AuthField = {
   name: string;
+  /** "select" — тізімнен таңдау (options керек), қалғаны — кәдімгі input түрі. */
   type: string;
   label: string;
+  /** Міндетті емес өріс (әдепкі — міндетті). */
+  optional?: boolean;
+  options?: { value: string; label: string }[];
+  /** select-тің бос нұсқасының жазуы. */
+  placeholder?: string;
 };
 
 /**
@@ -82,13 +88,29 @@ export default function AuthForm({
           {fields.map((f) => (
             <div key={f.name}>
               <label className="mb-1 block text-sm font-medium text-ink/70">{f.label}</label>
-              <input
-                type={f.type}
-                required
-                className="focus-ring w-full rounded-xl border border-ink/15 bg-white px-4 py-2.5 text-sm"
-                value={values[f.name] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
-              />
+              {f.type === "select" ? (
+                <select
+                  required={!f.optional}
+                  className="focus-ring w-full rounded-xl border border-ink/15 bg-white px-4 py-2.5 text-sm"
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                >
+                  <option value="">{f.placeholder ?? "—"}</option>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={f.type}
+                  required={!f.optional}
+                  className="focus-ring w-full rounded-xl border border-ink/15 bg-white px-4 py-2.5 text-sm"
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                />
+              )}
             </div>
           ))}
           {error && <p className="text-sm text-red-600">{errorText}</p>}

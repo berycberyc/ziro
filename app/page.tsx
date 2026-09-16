@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { dict, type Lang } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { getUpcomingSessions, type SessionSummary } from "@/lib/sessions";
+import { supabase } from "@/lib/supabase";
+import HomeSessions, { groupSessions } from "@/components/HomeSessions";
 
 const QR_PATTERN = [1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0];
 
@@ -68,15 +69,27 @@ export default function Home() {
   const [lang, setLang] = useState<Lang>("kk");
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
   const t = dict[lang];
-  const router = useRouter();
 
   useEffect(() => {
     getUpcomingSessions().then((data) => {
       setSessions(data);
       setLoaded(true);
     });
+    // Кабинеті бар ата-ана «Орын брондау» басқанда бірден тесттер тізіміне
+    // өтеді, жаңа адам — кабинет ашуға.
+    supabase.auth.getSession().then(({ data }) => setLoggedIn(!!data.session));
   }, []);
+
+  // Үлгі рұқсат қағазындағы күн — ең жақын алдағы тесттің күні, ескірмейді.
+  const { open: openSessions, upcoming: upcomingSessions } = groupSessions(sessions);
+  const nextSession = [...openSessions, ...upcomingSessions].sort((a, b) =>
+    a.sessionDate.localeCompare(b.sessionDate)
+  )[0];
+  const samplePassDate = nextSession
+    ? `${nextSession.sessionDate.slice(8, 10)}.${nextSession.sessionDate.slice(5, 7)}`
+    : "—";
 
   return (
     <main className="min-h-screen bg-parchment">
@@ -118,10 +131,10 @@ export default function Home() {
                 href="/register"
                 className="focus-ring rounded-lg bg-gold px-6 py-3 text-sm font-bold text-ink shadow-[0_6px_16px_rgba(198,154,58,0.28)] transition-transform hover:-translate-y-0.5"
               >
-                {t.ctaPrimary}
+                {t.heroCta}
               </Link>
               <a
-                href="#exam-types"
+                href="#how-it-works"
                 className="focus-ring rounded-lg border border-parchment/35 px-5 py-3 text-sm font-semibold text-parchment hover:border-parchment/70"
               >
                 {t.stepsTitle} →
@@ -141,7 +154,7 @@ export default function Home() {
                 </span>
               </div>
               <p className="font-display text-lg font-semibold">Айдана Серікова</p>
-              <p className="mb-4 font-mono text-[11.5px] text-ink/50">Оқушы ID · ZR-19042</p>
+              <p className="mb-4 font-mono text-[11.5px] text-ink/50">Оқушы ID · 19042</p>
               <hr className="my-4 border-dashed border-ink/15" />
               <div className="flex items-end justify-between">
                 <div className="flex flex-col gap-3">
@@ -151,7 +164,7 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="font-mono text-[10.5px] uppercase tracking-wide text-ink/40">Күні / Аудитория</p>
-                    <p className="text-sm font-bold">14.09 · 204</p>
+                    <p className="text-sm font-bold">{samplePassDate} · 204</p>
                   </div>
                 </div>
                 <QrMock />
@@ -161,61 +174,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* upcoming sessions (real data) */}
+      {/* sessions: open / upcoming / past (real data) */}
       <section className="mx-auto max-w-6xl px-6 py-20">
         <h2 className="font-display text-2xl font-bold text-ink">{t.testsTitle}</h2>
-        <div className="mt-6 flex flex-col gap-3">
-          {loaded && sessions.length === 0 && <p className="text-sm text-ink/50">{t.noSessions}</p>}
-          {sessions.map((s) => {
-            const today = new Date().toISOString().slice(0, 10);
-            const isOpen =
-              (!s.registrationOpensAt || today >= s.registrationOpensAt) &&
-              (!s.registrationClosesAt || today <= s.registrationClosesAt);
-            const isUpcoming = !isOpen && s.registrationOpensAt && today < s.registrationOpensAt;
-            return (
-              <div
-                key={s.sessionId}
-                className="flex flex-col justify-between gap-4 rounded-2xl border border-ink/10 bg-white p-6 shadow-sm transition-shadow hover:shadow-md sm:flex-row sm:items-center"
-              >
-                <div>
-                  <p className="font-display text-lg font-bold text-ink">
-                    {lang === "kk" ? s.titleKk : s.titleRu}
-                  </p>
-                  <p className="mt-1 text-sm text-ink/50">{s.sessionDate}</p>
-                  <p className="mt-1 font-mono text-xs text-ink/40">
-                    {isOpen
-                      ? `${t.registrationWindowLabel}: ${s.registrationOpensAt ?? "—"} — ${s.registrationClosesAt ?? "—"}`
-                      : isUpcoming
-                      ? (lang === "kk"
-                          ? `Тіркеу басталады: ${s.registrationOpensAt}`
-                          : `Регистрация откроется: ${s.registrationOpensAt}`)
-                      : t.registrationClosed}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 flex-wrap justify-end">
-                  {s.hasResults && (
-                    <Link
-                      href={`/result/${s.sessionId}`}
-                      className="focus-ring rounded-full border border-parent px-4 py-2.5 text-sm font-semibold text-parent hover:bg-parent-soft"
-                    >
-                      {lang === "kk" ? "Нәтижелер" : "Результаты"}
-                    </Link>
-                  )}
-                  <span className="font-display text-lg font-bold text-gold-deep">
-                    {s.price.toLocaleString("ru-RU")} ₸
-                  </span>
-                  <button
-                    onClick={() => isOpen && router.push("/register")}
-                    disabled={!isOpen}
-                    className="focus-ring rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-parchment shadow-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:bg-ink/20 disabled:text-ink/50 disabled:shadow-none"
-                  >
-                    {isOpen ? t.ctaPrimary : t.registrationClosed}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <HomeSessions
+          sessions={sessions}
+          loaded={loaded}
+          lang={lang}
+          bookHref={loggedIn ? "/dashboard/tests" : "/register"}
+        />
       </section>
 
       {/* exam types */}
@@ -263,7 +230,7 @@ export default function Home() {
       </section>
 
       {/* how it works */}
-      <div className="border-y border-ink/[0.06] bg-white">
+      <div id="how-it-works" className="scroll-mt-24 border-y border-ink/[0.06] bg-white">
         <div className="mx-auto grid max-w-6xl sm:grid-cols-4">
           {[
             [t.step1Title, t.step1Desc],
@@ -308,8 +275,11 @@ export default function Home() {
 
           <div className="rounded-2xl bg-white p-6 shadow-[0_30px_60px_-18px_rgba(22,35,63,0.18),0_0_0_1px_rgba(22,35,63,0.06)]">
             <div className="mb-4 flex items-center justify-between">
-              <span className="font-display text-[15px] font-semibold text-ink">
-                {lang === "kk" ? "Математика · Рейтинг" : "Математика · Рейтинг"}
+              <span className="flex items-center gap-2 font-display text-[15px] font-semibold text-ink">
+                Математика · Рейтинг
+                <span className="rounded bg-ink/[0.07] px-1.5 py-0.5 font-body text-[11px] font-semibold text-ink/60">
+                  {t.sampleLabel}
+                </span>
               </span>
               <span className="font-mono text-[10.5px] text-ink/50">
                 180 {lang === "kk" ? "қатысушы" : "участников"}
@@ -330,14 +300,17 @@ export default function Home() {
               >
                 <span className={`font-mono text-[12.5px] ${me ? "font-bold text-gold-deep" : "text-ink/40"}`}>
                   {rank}
+                  <span className="sr-only"> </span>
                 </span>
                 <span className={`font-mono text-[13.5px] ${me ? "font-bold text-ink" : "text-ink/80"}`}>
                   {code}
+                  <span className="sr-only"> </span>
                   {me && (
                     <span className="ml-2 rounded bg-gold px-1.5 py-0.5 font-mono text-[9.5px] font-bold tracking-wide text-ink">
                       СІЗ
                     </span>
                   )}
+                  <span className="sr-only"> </span>
                 </span>
                 <span className="font-display text-sm font-semibold text-ink">{score}</span>
               </div>
