@@ -12,6 +12,7 @@ import {
 } from "@/lib/StaffRoleContext";
 
 const navItems: NavItem[] = [
+  { href: "/admin/steps", label: "Қадамдар" },
   { href: "/admin/sessions", label: "Пробные тесты" },
   { href: "/admin/upload-download", label: "Жүктеу/түсіру" },
   { href: "/admin/monitoring", label: "Мониторинг" },
