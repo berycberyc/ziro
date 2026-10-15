@@ -28,6 +28,10 @@ export type SeatPassStudent = {
   /** Тест түрінің коды: NIS / BIL / RFMS (немесе атауы). */
   testTypeCode: string;
   testTypeName: string;
+  /** Оқушы ID (ZipGrade ID). */
+  studentId: string;
+  /** Брондау нөмірі (қысқа код). */
+  bookingCode: string;
   /** QR-дағы мәтін: қысқа код не тіркеу id. */
   qrText: string;
   /** 3:4 JPEG/PNG байттары; жоқ болса — бос орын салынады. */
@@ -253,6 +257,20 @@ export async function buildSeatPassesPdf(opts: {
     const vVal = variantLabel(st.variant);
     const vSize = fitSize(bold, vVal, 80, 42, 16);
     centerText(page, bold, vVal, nameX + 48, vBoxY - 31 - vSize * 0.36, vSize, NAVY);
+
+    // Оқушы ID және брондау нөмірі — нұсқа рамкасының оң жағында.
+    const idX = nameX + 96 + 18;
+    const idW = W - MARGIN - idX;
+    const idPairs: [string, string][] = [
+      ["Оқушы ID", st.studentId || "—"],
+      ["Брондау нөмірі", st.bookingCode || "—"],
+    ];
+    idPairs.forEach(([k, v], n) => {
+      const top = vBoxY - n * 33;
+      page.drawText(k, { x: idX, y: top - 12, size: 10.5, font: regular, color: GRAY });
+      const size = fitSize(bold, v, idW, 17, 9);
+      page.drawText(v, { x: idX, y: top - 29, size, font: bold, color: NAVY });
+    });
 
     // ---------- төменгі бөлік: мәліметтер + QR ----------
     const infoTop = rowTop - photoH - 26;

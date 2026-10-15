@@ -105,7 +105,7 @@ export default function UploadDownloadPage() {
           (chunk) =>
             supabase
               .from("students")
-              .select("id, full_name, first_name, last_name, language, photo_url")
+              .select("id, full_name, first_name, last_name, language, photo_url, zipgrade_id")
               .in("id", chunk)
         ),
         fetchAllByIds<any>(
@@ -157,6 +157,8 @@ export default function UploadDownloadPage() {
             paid: r.payment_status === "paid",
             testTypeCode: t?.code ?? "",
             testTypeName: t?.name_kk ?? "",
+            studentId: String(s?.zipgrade_id ?? "").trim(),
+            bookingCode: String(r.short_code ?? "").trim(),
             qrText: r.short_code ?? r.id,
             photo: photos[k],
           });
