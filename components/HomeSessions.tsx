@@ -49,7 +49,9 @@ export function groupSessions(sessions: SessionSummary[]) {
   const past: SessionSummary[] = [];
 
   for (const s of sessions) {
-    if (s.sessionDate < today) {
+    // Нәтиже жарияланса — тест күні болса да бірден «Өткен» тобына
+    // шығады, сонда «Нәтижелер шықты» және «Рейтингті көру» бірден көрінеді.
+    if (s.sessionDate < today || s.hasResults) {
       past.push(s);
       continue;
     }
