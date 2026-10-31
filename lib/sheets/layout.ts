@@ -225,3 +225,98 @@ export function kindsForTestType(code: string | null | undefined): SheetKind[] {
   if (code === "RFMS") return ["rfmsh"];
   return [];
 }
+
+// ============================================================
+//  РФМШ: жауап — сан, әр цифр алты нүкте арасындағы сызықтармен
+//  жазылады (калькулятордағыдай). Машина цифрды танымайды, тек
+//  «осы екі нүктенің арасы сызылған ба» деп жеті рет сұрайды.
+// ============================================================
+
+/** Сегменттер: қай нүктеден қай нүктеге. Нүктелер: 0 сол-жоғары, 1 оң-жоғары,
+ *  2 сол-орта, 3 оң-орта, 4 сол-төмен, 5 оң-төмен. */
+export const SEGMENTS: readonly [number, number][] = [
+  [0, 1], // жоғарғы
+  [0, 2], // сол жоғарғы
+  [1, 3], // оң жоғарғы
+  [2, 3], // ортаңғы
+  [2, 4], // сол төменгі
+  [3, 5], // оң төменгі
+  [4, 5], // төменгі
+];
+
+/** Әр цифрда қай сегменттер сызылады — парақтағы үлгі бойынша. */
+export const DIGIT_SEGMENTS: readonly (readonly number[])[] = [
+  [0, 1, 2, 4, 5, 6],
+  [2, 5],
+  [0, 2, 3, 4, 6],
+  [0, 2, 3, 5, 6],
+  [1, 2, 3, 5],
+  [0, 1, 3, 5, 6],
+  [0, 1, 3, 4, 5, 6],
+  [0, 2, 5],
+  [0, 1, 2, 3, 4, 5, 6],
+  [0, 1, 2, 3, 5, 6],
+];
+
+export interface RfmshGeometry {
+  corners: [Spot, Spot, Spot, Spot];
+  /** Алты нүкте: сұрақ 1–30, разряд 0–6. */
+  nodes(question: number, digit: number): Spot[];
+  /** Жол белгілері: x-тер (сол, оң) және әр жолдың y-і. */
+  rowMarksX: number[];
+  rowMarksY: number[];
+  questions: number;
+  digits: number;
+  /** Жолдың биіктігі мен ұяшықтың ені — суреттен қию үшін. */
+  rowBox(question: number): { left: number; top: number; right: number; bottom: number };
+  /** Ұяшық шекарасы мен жоғарғы/төменгі нүктенің арасы (мм) — сызықты іздеу аумағы. */
+  edgeGap: number;
+}
+
+/** Бастапқы РФМШ парағының сандары (matemica2-ден, ReportLab-пен салынған). */
+const R = {
+  colLeft: 7.1613, colTop: 107.95, colW: 94.9662, colH: 170.0007, colOff: 98.8441,
+  rows: 15, rowStep: 10.581, firstRow: 119.2381, digits: 7,
+  dW: 4.5518, dH: 7.0535, dStep: 12.61, firstDigit: 17.8365, nodeBelow: 1.8521,
+};
+
+/**
+ * РФМШ торы. `scale`, `shift` — бастапқы парақтан біздің параққа өту
+ * (біз оны 0,934 есе кішірейтіп, белгілер шетке тым жақын болмасын деп
+ * ортаға жылжыттық). Тексеру үшін бастапқы парақты да оқуға болады.
+ */
+export function rfmshGeometry(opts?: { scale: number; corners: [Spot, Spot, Spot, Spot]; map: (s: Spot) => Spot }): RfmshGeometry {
+  const S = opts?.scale ?? 0.934;
+  const map = opts?.map ?? ((s: Spot) => ({ x: 105 + (s.x - 104.08) * S, y: 276 - (277.95 - s.y) * S }));
+  const corners = opts?.corners ?? cornerSpots();
+  const rowY = (row: number) => R.firstRow + row * R.rowStep;
+  return {
+    corners,
+    questions: 30,
+    digits: R.digits,
+    nodes(question, digit) {
+      const inCol = (question - 1) % R.rows;
+      const col = Math.floor((question - 1) / R.rows);
+      const left = R.firstDigit + col * R.colOff + digit * R.dStep;
+      const right = left + R.dW;
+      const top = rowY(inCol) + R.nodeBelow;
+      const middle = top + R.dH / 2;
+      const bottom = top + R.dH;
+      return [
+        { x: left, y: top }, { x: right, y: top },
+        { x: left, y: middle }, { x: right, y: middle },
+        { x: left, y: bottom }, { x: right, y: bottom },
+      ].map(map);
+    },
+    rowMarksX: [map({ x: R.colLeft - 3.2, y: 0 }).x, map({ x: R.colLeft + R.colOff + R.colW + 3.2, y: 0 }).x],
+    rowMarksY: Array.from({ length: R.rows }, (_, r) => map({ x: 0, y: rowY(r) + R.nodeBelow + R.dH / 2 }).y),
+    rowBox(question) {
+      const inCol = (question - 1) % R.rows;
+      const col = Math.floor((question - 1) / R.rows);
+      const a = map({ x: R.colLeft + col * R.colOff, y: rowY(inCol) });
+      const b = map({ x: R.colLeft + col * R.colOff + R.colW, y: rowY(inCol) + R.rowStep });
+      return { left: a.x, top: a.y, right: b.x, bottom: b.y };
+    },
+    edgeGap: Math.min(R.nodeBelow, R.rowStep - R.nodeBelow - R.dH) * S,
+  };
+}

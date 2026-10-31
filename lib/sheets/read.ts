@@ -30,8 +30,9 @@
 import { decodeSheetCode, type SheetCode } from "./code";
 import {
   cornerSpots, layoutOf, SMALL_MARK, STRIP, stripMarkSpots, stripSpots,
-  type Bubble, type Layout, type SheetKind, type Spot,
+  rfmshGeometry, type Bubble, type Layout, type RfmshGeometry, type SheetKind, type Spot,
 } from "./layout";
+import { readRfmshGrid, type RfmshAnswer } from "./rfmsh";
 import type { SubjectKey } from "@/lib/questions/subjects";
 
 /** Сұр сурет: 0 — қара, 255 — ақ. */
@@ -41,7 +42,7 @@ export interface Grey {
   data: Uint8Array;
 }
 
-interface Paper {
+export interface Paper {
   block: number;
   columns: number;
   rows: number;
@@ -87,7 +88,7 @@ export function greysFromRgba(rgba: Uint8ClampedArray | Uint8Array, width: numbe
 }
 
 /** Қағаздың ақтығы торкөздер бойынша: әр жердің өз «ағы». */
-function paperOf(grey: Grey): Paper {
+export function paperOf(grey: Grey): Paper {
   // Торкөз белгіден едәуір үлкен: толығымен қара шаршымен жабылған торкөз
   // «қағаз қара» деп шешіп қоймауы үшін.
   const block = Math.max(24, Math.round(grey.width / 14));
@@ -120,7 +121,7 @@ function paperOf(grey: Grey): Paper {
   return { block, columns, rows, level };
 }
 
-function paperAt(paper: Paper, x: number, y: number): number {
+export function paperAt(paper: Paper, x: number, y: number): number {
   const { block, columns, rows, level } = paper;
   const fx = Math.min(columns - 1, Math.max(0, x / block - 0.5));
   const fy = Math.min(rows - 1, Math.max(0, y / block - 0.5));
@@ -132,7 +133,7 @@ function paperAt(paper: Paper, x: number, y: number): number {
   return top * (1 - ty) + bottom * ty;
 }
 
-function darkMap(grey: Grey, paper: Paper): Uint8Array {
+export function darkMap(grey: Grey, paper: Paper): Uint8Array {
   const { width, height, data } = grey;
   const out = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
@@ -292,7 +293,7 @@ function pointsPerMm(rough: number[]): number {
  * сызыққа жабысып, шаршы болудан қалады. Сондықтан белгі өлшеміндей терезе
  * күтілген жердің айналасында жылжиды да, сия ең көп жиналған орын алынады.
  */
-function findSmall(grey: Grey, paper: Paper, rough: number[], planned: Spot[], reachMm: number): (Spot | null)[] {
+export function findSmall(grey: Grey, paper: Paper, rough: number[], planned: Spot[], reachMm: number): (Spot | null)[] {
   const perMm = pointsPerMm(rough);
   const side = Math.max(3, Math.round(SMALL_MARK * perMm));
   const half = Math.floor(side / 2);
@@ -321,7 +322,7 @@ function findSmall(grey: Grey, paper: Paper, rough: number[], planned: Spot[], r
 }
 
 /** Тор маңындағы белгілер бойынша бөліктеп түзету. */
-interface Cells {
+export interface Cells {
   xs: number[];
   ys: number[];
   planned: Spot[];
@@ -331,7 +332,7 @@ interface Cells {
   tuneKeyOf?: (spot: Spot) => string | null;
 }
 
-function placeInCells(cells: Cells, spot: Spot): Spot {
+export function placeInCells(cells: Cells, spot: Spot): Spot {
   const base = place(cells.rough, spot);
   const { xs, ys } = cells;
   let cx = 0;
@@ -477,7 +478,7 @@ export interface RowAnswer {
 export type SheetReading =
   | { status: "no_sheet" }
   | { status: "no_code"; corners: Spot[] }
-  | { status: "rfmsh"; code: SheetCode }
+  | { status: "rfmsh"; code: SheetCode; numbers: RfmshAnswer[]; width: number; height: number }
   | {
       status: "ok";
       code: SheetCode;
@@ -513,14 +514,14 @@ function readCode(grey: Grey, paper: Paper, rough: number[]): SheetCode | null {
  */
 export function readSheet(
   greys: { neutral: Grey; red: Grey },
-  /** Тек тексеру үшін: кодсыз ескі суретті белгілі түр ретінде оқу. */
-  test?: { forceKind?: SheetKind },
+  /** Тек тексеру үшін: кодсыз ескі суретті белгілі түр/тор ретінде оқу. */
+  test?: { forceKind?: SheetKind; rfmsh?: RfmshGeometry; debug?: any },
 ): SheetReading {
   const base = greys.neutral;
   const basePaper = paperOf(base);
   const corners = findCorners(base, darkMap(base, basePaper));
   if (!corners) return { status: "no_sheet" };
-  const rough = mapping(cornerSpots(), corners);
+  const rough = mapping(test?.rfmsh?.corners ?? cornerSpots(), corners);
   if (!rough) return { status: "no_sheet" };
 
   const code = test?.forceKind
@@ -528,7 +529,10 @@ export function readSheet(
     : readCode(base, basePaper, rough);
   if (!code) return { status: "no_code", corners };
   const layout = layoutOf(code.kind);
-  if (!layout) return { status: "rfmsh", code };
+  if (!layout) {
+    const numbers = readRfmshGrid(base, basePaper, rough, test?.rfmsh ?? rfmshGeometry(), base, basePaper, test?.debug);
+    return { status: "rfmsh", code, numbers, width: base.width, height: base.height };
+  }
 
   const grey = layout.channel === "red" ? greys.red : base;
   const paper = layout.channel === "red" ? paperOf(grey) : basePaper;

@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { fetchAll, fetchAllByIds } from "@/lib/fetchAll";
 import { SheetCamera, type Shot } from "@/components/sheets/SheetCamera";
 import { SheetFix } from "@/components/sheets/SheetFix";
+import { RfmshFix } from "@/components/sheets/RfmshFix";
+import type { RfmshAnswer } from "@/lib/sheets/rfmsh";
 import { readFile } from "@/lib/sheets/camera";
 import { answersBySubject, type OvalSpot, type RowAnswer } from "@/lib/sheets/read";
 import { kindsForTestType, KIND_LABEL, layoutOf, type SheetKind } from "@/lib/sheets/layout";
@@ -42,6 +44,8 @@ type Pending = {
   code: SheetCode;
   answers: RowAnswer[];
   ovals: OvalSpot[];
+  /** РФМШ: жазылған сандар (басқа парақтарда жоқ). */
+  numbers?: RfmshAnswer[];
   shot: string;
   width: number;
   height: number;
@@ -51,6 +55,7 @@ type Pending = {
 
 const SUBJECT_LABEL: Partial<Record<SubjectKey, string>> = {
   math: "Математика", sandyq: "Сандық", zharatylystanu: "Жаратылыстану", tilder: "Тілдер", bil: "БИЛ",
+  rfmsh: "РФМШ",
 };
 
 function formatDate(iso: string): string {
@@ -145,19 +150,22 @@ export default function ScanSheetsPage() {
     return subjects.every((subj) => taken[s.zipgradeId]?.[subj]);
   };
 
-  const sheetsTotal = students.reduce((n, s) => n + s.kinds.filter((k) => k !== "rfmsh").length, 0);
-  const sheetsDone = students.reduce((n, s) => n + s.kinds.filter((k) => k !== "rfmsh" && kindDone(s, k)).length, 0);
+  const sheetsTotal = students.reduce((n, s) => n + s.kinds.length, 0);
+  const sheetsDone = students.reduce((n, s) => n + s.kinds.filter((k) => kindDone(s, k)).length, 0);
 
   // ---- суреттен келген нәтиже ----
   const takeShot = ({ reading, shot, width, height }: Shot) => {
     setMessage("");
     if (reading.status === "no_sheet") { setError("Парақ табылмады: төрт бұрыштағы қара белгі көрінуі керек."); return; }
     if (reading.status === "no_code") { setError("Код оқылмады. Парақты жарықта, тік ұстап қайта түсіріңіз."); return; }
+    setError("");
     if (reading.status === "rfmsh") {
-      setError("РФМШ парағы әзірге суреттен оқылмайды — «РФМШ жауаптары» экранында қолмен енгізіңіз.");
+      setPending({
+        code: reading.code, answers: [], ovals: [], numbers: reading.numbers,
+        shot, width, height, reviewed: false, askReplace: false,
+      });
       return;
     }
-    setError("");
     setPending({
       code: reading.code, answers: reading.answers, ovals: reading.ovals,
       shot, width, height, reviewed: false, askReplace: false,
@@ -177,8 +185,15 @@ export default function ScanSheetsPage() {
   const card = useMemo(() => {
     if (!pending) return null;
     const student = byId.get(pending.code.zipgradeId) ?? null;
-    const lay = layoutOf(pending.code.kind)!;
-    const perSubject = lay.subjects.map((subject) => {
+    const lay = layoutOf(pending.code.kind) ?? { subjects: ["rfmsh"] as SubjectKey[] };
+    const perSubject = pending.numbers ? [{
+      subject: "rfmsh" as SubjectKey,
+      total: pending.numbers.length,
+      answered: pending.numbers.filter((n) => n.value !== "").length,
+      blank: pending.numbers.filter((n) => n.value === "").length,
+      double: 0,
+      doubtful: pending.numbers.filter((n) => n.unsure).length,
+    }] : lay.subjects.map((subject) => {
       const rows = pending.answers.filter((a) => a.subject === subject);
       return {
         subject,
@@ -206,7 +221,9 @@ export default function ScanSheetsPage() {
     setSaving(true);
     setError("");
     try {
-      const bySubject = answersBySubject(pending.answers);
+      const bySubject: Partial<Record<SubjectKey, Record<string, string>>> = pending.numbers
+        ? { rfmsh: Object.fromEntries(pending.numbers.map((n) => [String(n.question), n.value])) }
+        : answersBySubject(pending.answers);
       const now = new Date().toISOString();
       const rows = card.lay.subjects.map((subject) => ({
         test_session_id: sessionId,
@@ -417,7 +434,14 @@ export default function ScanSheetsPage() {
         </div>
       )}
 
-      {pending && fixing && (
+      {pending && fixing && pending.numbers && (
+        <RfmshFix shot={pending.shot} width={pending.width} height={pending.height}
+                  numbers={pending.numbers}
+                  onCancel={() => setFixing(false)}
+                  onDone={(numbers) => { setPending({ ...pending, numbers, reviewed: true }); setFixing(false); }} />
+      )}
+
+      {pending && fixing && !pending.numbers && (
         <SheetFix shot={pending.shot} width={pending.width} height={pending.height}
                   ovals={pending.ovals} answers={pending.answers}
                   onCancel={() => setFixing(false)}
