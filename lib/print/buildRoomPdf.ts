@@ -2,6 +2,8 @@ import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf
 import fontkit from "@pdf-lib/fontkit";
 import { SUBJECT_LABELS, MONOLINGUAL_SUBJECTS, type SubjectKey } from "@/lib/questions/subjects";
 import { FILL_RADIUS_K, type SheetPageIndex } from "@/lib/print/answerSheetPack";
+import { SheetStamper } from "@/lib/sheets/stamp";
+import { layoutOf, type SheetKind } from "@/lib/sheets/layout";
 
 /**
  * Бір аудиторияға арналған басып шығару файлын құрастыру.
@@ -84,8 +86,14 @@ export async function buildRoomPdf(opts: {
   sheets: Map<SubjectKey, SheetPack>;
   /** Прогресс: қанша оқушы дайын болды */
   onProgress?: (done: number, total: number) => void;
+  /**
+   * true — ZipGrade орнына біздің бланктер (public/sheets): бір НИШ парағы
+   * үш пәнге ортақ, Тілдер, БИЛ, РФМШ — әрқайсысы өз парағында. Камерамен
+   * түсіріп оқылады. Бұл режимде `sheets` (ZipGrade пачкалары) керек емес.
+   */
+  ownSheets?: boolean;
 }): Promise<{ pdf: Blob; registry: RegistryRow[] }> {
-  const { sessionTitle, sessionDate, students, files, sheets, onProgress } = opts;
+  const { sessionTitle, sessionDate, students, files, sheets, onProgress, ownSheets } = opts;
 
   const out = await PDFDocument.create();
   out.registerFontkit(fontkit);
@@ -104,6 +112,7 @@ export async function buildRoomPdf(opts: {
   };
 
   let pageNum = 0;
+  let stamper: SheetStamper | null = null;
   const addBlankPage = () => { out.addPage([A4.width, A4.height]); pageNum++; };
   const registry: RegistryRow[] = [];
 
@@ -134,6 +143,43 @@ export async function buildRoomPdf(opts: {
     const st = students[i];
 
     const registryRow: RegistryRow = { seat: st.seat, fullName: st.fullName, subjects: [] };
+
+    if (ownSheets) {
+      stamper ??= await SheetStamper.create(out);
+      // Пәндер парақтар бойынша топталады: НИШ парағы — математика, сандық,
+      // жаратылыстану; қалғандары — өз парағы. Әр топ: парақ, оның таза
+      // сырты, содан кейін топтағы әр пәннің сұрақ беттері.
+      const groups: { kind: SheetKind; subjects: SubjectKey[] }[] = [];
+      for (const subject of st.subjects) {
+        const kind = sheetKindOf(subject);
+        const last = groups[groups.length - 1];
+        if (last && last.kind === kind) last.subjects.push(subject);
+        else groups.push({ kind, subjects: [subject] });
+      }
+      for (const group of groups) {
+        const groupFrom = pageNum + 1;
+        await stamper.add(group.kind, {
+          fullName: st.fullName, zipgradeId: st.zipgradeId, variant: st.variant, lang: st.lang,
+          classroom: st.classroom, seat: st.seat, sessionTitle, sessionDate: formatDate(sessionDate),
+        });
+        pageNum++;
+        addBlankPage();
+        for (const [k, subject] of group.subjects.entries()) {
+          const subjectFrom = k === 0 ? groupFrom : pageNum + 1;
+          const key = printFileKey(subject, st.variant, st.lang);
+          const doc = (await getDoc(key)) ?? (await getDoc(printFileKey(subject, st.variant, "kk")));
+          if (doc) {
+            const docPages = await out.copyPages(doc, doc.getPageIndices());
+            docPages.forEach((p) => { out.addPage(p); pageNum++; });
+            if (docPages.length % 2 === 1) addBlankPage();
+          }
+          registryRow.subjects.push({ subject, from: subjectFrom, to: pageNum });
+        }
+      }
+      registry.push(registryRow);
+      onProgress?.(i + 1, students.length);
+      continue;
+    }
 
     for (const subject of st.subjects) {
       const subjectFrom = pageNum + 1;
@@ -292,4 +338,19 @@ function drawRfmshSheet(page: PDFPage, sheet: PDFImage) {
     width: w,
     height: h,
   });
+}
+
+/** Пән қай бланкте. */
+function sheetKindOf(subject: SubjectKey): SheetKind {
+  if (subject === "tilder") return "tilder";
+  if (subject === "bil") return "bil";
+  if (subject === "rfmsh") return "rfmsh";
+  if (layoutOf("nis")!.subjects.includes(subject)) return "nis";
+  throw new Error(`«${subject}» пәні үшін бланк жоқ`);
+}
+
+/** «2026-11-14» → «14.11.2026»; басқа түрде келсе — өзгеріссіз. */
+function formatDate(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? "");
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : value ?? "";
 }

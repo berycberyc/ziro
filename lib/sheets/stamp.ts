@@ -122,32 +122,47 @@ function stampOne(p: Painter, kind: SheetKind, st: SheetStudent) {
 }
 
 /**
+ * Бар PDF құжатқа парақ қосушы. Қаріптер мен бос парақтар бір рет жүктеледі.
+ * Аудитория жинағы да, бір оқушының бланкі де осы арқылы жасалады.
+ */
+export class SheetStamper {
+  private blanks = new Map<SheetKind, PDFDocument>();
+  private constructor(private out: PDFDocument, private fonts: Fonts) {}
+
+  static async create(out: PDFDocument): Promise<SheetStamper> {
+    out.registerFontkit(fontkit);
+    const [regularBytes, boldBytes] = await Promise.all([
+      fetch("/fonts/print-sans.ttf").then((r) => r.arrayBuffer()),
+      fetch("/fonts/print-sans-bold.ttf").then((r) => r.arrayBuffer()),
+    ]);
+    return new SheetStamper(out, {
+      regular: await out.embedFont(regularBytes, { subset: true }),
+      bold: await out.embedFont(boldBytes, { subset: true }),
+    });
+  }
+
+  /** Құжаттың соңына оқушының парағын қосады. */
+  async add(kind: SheetKind, student: SheetStudent): Promise<PDFPage> {
+    let blank = this.blanks.get(kind);
+    if (!blank) {
+      blank = await PDFDocument.load(await fetch(BLANK_URL[kind]).then((r) => r.arrayBuffer()));
+      this.blanks.set(kind, blank);
+    }
+    const [page] = await this.out.copyPages(blank, [0]);
+    this.out.addPage(page);
+    stampOne(new Painter(page, this.fonts), kind, student);
+    return page;
+  }
+}
+
+/**
  * Бірнеше оқушының парақтары бір PDF-ке. Тәртібі — берілген тәртіп.
  * Қате деректе (ZipGrade ID жоқ, нұсқа жоқ) қате лақтырады — ондай парақ
  * басылмауы керек, әйтпесе оны ешкім оқи алмайды.
  */
 export async function buildSheetsPdf(items: { kind: SheetKind; student: SheetStudent }[]): Promise<Uint8Array> {
   const out = await PDFDocument.create();
-  out.registerFontkit(fontkit);
-  const [regularBytes, boldBytes] = await Promise.all([
-    fetch("/fonts/print-sans.ttf").then((r) => r.arrayBuffer()),
-    fetch("/fonts/print-sans-bold.ttf").then((r) => r.arrayBuffer()),
-  ]);
-  const fonts: Fonts = {
-    regular: await out.embedFont(regularBytes, { subset: true }),
-    bold: await out.embedFont(boldBytes, { subset: true }),
-  };
-
-  const blanks = new Map<SheetKind, PDFDocument>();
-  for (const { kind, student } of items) {
-    let blank = blanks.get(kind);
-    if (!blank) {
-      blank = await PDFDocument.load(await fetch(BLANK_URL[kind]).then((r) => r.arrayBuffer()));
-      blanks.set(kind, blank);
-    }
-    const [page] = await out.copyPages(blank, [0]);
-    out.addPage(page);
-    stampOne(new Painter(page, fonts), kind, student);
-  }
+  const stamper = await SheetStamper.create(out);
+  for (const { kind, student } of items) await stamper.add(kind, student);
   return out.save();
 }

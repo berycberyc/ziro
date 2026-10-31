@@ -106,6 +106,12 @@ export default function PrintRoomsPage() {
   const [needs, setNeeds] = useState<Need[]>([]);
   const [sheetNeeds, setSheetNeeds] = useState<SheetNeed[]>([]);
   const [students, setStudents] = useState<RoomStudent[]>([]);
+  /**
+   * Жауап парағының түрі. «zirotest» — біздің бланктер (код жолағымен,
+   * «Парақтарды түсіру» экранында камерамен оқылады); «zipgrade» — ескі жол,
+   * ZipGrade пачкаларымен. Ескісі қосалқы ретінде қалды.
+   */
+  const [sheetMode, setSheetMode] = useState<"zirotest" | "zipgrade">("zirotest");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -166,6 +172,7 @@ export default function PrintRoomsPage() {
 
       const variant = parseInt(String(b.test_variant ?? "").replace(/\D/g, ""), 10);
       if (!variant) gaps.push("нұсқа");
+      else if (variant > 4) gaps.push("нұсқа 1–4 болуы керек");
       if (!b.classroom) gaps.push("аудитория");
       if (!b.seat) gaps.push("орын");
       if (!s?.language) gaps.push("тіл");
@@ -318,7 +325,7 @@ export default function PrintRoomsPage() {
   const blocked =
     missingFields.length > 0 ||
     missingFiles.length > 0 ||
-    badSheets.length > 0 ||
+    (sheetMode === "zipgrade" && badSheets.length > 0) ||
     students.length === 0;
 
   /** ZipGrade пачкасын жүктеу: алдымен талданады, содан кейін ғана сақталады. */
@@ -532,7 +539,7 @@ export default function PrintRoomsPage() {
 
       // Жауап парақтары да бір рет.
       const sheetsMap = new Map<SubjectKey, SheetPack>();
-      for (const sn of sheetNeeds) {
+      for (const sn of sheetMode === "zipgrade" ? sheetNeeds : []) {
         if (!sn.pack) continue;
         const res = await fetch(sn.pack.fileUrl);
         sheetsMap.set(sn.subject, { bytes: await res.arrayBuffer(), pages: sn.pack.pages });
@@ -545,6 +552,7 @@ export default function PrintRoomsPage() {
         students: roomStudents,
         files: filesMap,
         sheets: sheetsMap,
+        ownSheets: sheetMode === "zirotest",
         onProgress: (done, total) => setProgress(`${done} / ${total} оқушы`),
       });
 
@@ -619,9 +627,36 @@ export default function PrintRoomsPage() {
       </Link>
       <h1 className="font-display text-2xl font-bold text-admin">Аудитория бойынша басып шығару</h1>
       <p className="mt-1 text-sm text-ink/60">
-        Әр оқушының әр пәні алдында оның өз жауап парағы: аты, нұсқасы, аудиториясы, орны, ал
-        «Нұсқа» шеңбері боялған. Екі жақты басып шығаруға дайын.
+        Әр оқушыға: оның өз жауап парағы (аты, нұсқасы, аудиториясы, орны басылған), содан кейін
+        сұрақ беттері. Екі жақты басып шығаруға дайын.
       </p>
+
+      <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
+        <h2 className="font-display text-lg font-bold text-ink">Жауап парағы</h2>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            onClick={() => setSheetMode("zirotest")}
+            className={`focus-ring rounded-full border px-4 py-2 text-sm font-medium ${
+              sheetMode === "zirotest" ? "border-admin bg-admin text-white" : "border-ink/15 text-ink/70"
+            }`}
+          >
+            Zirotest бланкі (камерамен оқылады)
+          </button>
+          <button
+            onClick={() => setSheetMode("zipgrade")}
+            className={`focus-ring rounded-full border px-4 py-2 text-sm font-medium ${
+              sheetMode === "zipgrade" ? "border-admin bg-admin text-white" : "border-ink/15 text-ink/70"
+            }`}
+          >
+            ZipGrade (ескі)
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-ink/50">
+          {sheetMode === "zirotest"
+            ? "НИШ: математика, сандық, жаратылыстану — бір парақта, Тілдер — бөлек парақта. БИЛ мен РФМШ — өз парақтары. Код жолағы әр оқушыға басылады; жазылған парақтарды «Парақтарды түсіру» экранында камерамен түсіресіз. ZipGrade пачкасы мен кілті керек емес."
+            : "Ескі жол: әр пән бойынша ZipGrade пачкасы мен кілт үлгісін жүктеу керек."}
+        </p>
+      </section>
 
       {students.length === 0 && missingFields.length === 0 && (
         <p className="mt-6 rounded-xl bg-ink/5 px-4 py-3 text-sm text-ink/50">
@@ -645,7 +680,7 @@ export default function PrintRoomsPage() {
         </section>
       )}
 
-      {sheetNeeds.length > 0 && (
+      {sheetMode === "zipgrade" && sheetNeeds.length > 0 && (
         <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
           <h2 className="font-display text-lg font-bold text-ink">
             Жауап парақтары:{" "}
@@ -717,7 +752,7 @@ export default function PrintRoomsPage() {
         </section>
       )}
 
-      {sheetNeeds.length > 0 && (
+      {sheetMode === "zipgrade" && sheetNeeds.length > 0 && (
         <section className="mt-4 rounded-2xl border border-ink/10 bg-white p-5">
           <h2 className="font-display text-lg font-bold text-ink">
             Жауап кілті: {sheetNeeds.filter((s) => s.template).length} / {sheetNeeds.length}
