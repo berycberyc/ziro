@@ -7,6 +7,9 @@ import type { SessionDetail } from "@/lib/sessions";
 
 type Student = { id: string; full_name: string };
 
+// Офлайн тіркелу уақытша жабық — қайта ашу үшін false қойыңыз.
+const OFFLINE_CLOSED = true;
+
 export default function BookingForm({
   session,
   students,
@@ -22,7 +25,7 @@ export default function BookingForm({
 }) {
   const [studentId, setStudentId] = useState("");
   const [testTypeId, setTestTypeId] = useState("");
-  const [format, setFormat] = useState<"offline" | "online">("offline");
+  const [format, setFormat] = useState<"offline" | "online">(OFFLINE_CLOSED ? "online" : "offline");
   const [offerChecked, setOfferChecked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -142,13 +145,14 @@ export default function BookingForm({
               <button
                 type="button"
                 onClick={() => setFormat("offline")}
-                className={`focus-ring flex-1 rounded-xl border px-3 py-2 text-sm font-medium ${
+                disabled={OFFLINE_CLOSED}
+                className={`focus-ring flex-1 rounded-xl border px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
                   format === "offline"
                     ? "border-parent bg-parent-soft text-parent"
                     : "border-ink/15 text-ink/70"
                 }`}
               >
-                Офлайн
+                Офлайн{OFFLINE_CLOSED && " (уақытша жабық)"}
               </button>
               <button
                 type="button"
