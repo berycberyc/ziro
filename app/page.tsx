@@ -73,6 +73,13 @@ export default function Home() {
   const t = dict[lang];
 
   useEffect(() => {
+    // Жарнама/сторис сілтемесімен келген адам — алдымен /baikau бетіне:
+    // онда күні, бағасы және өткен нәтижелер бар. Белгіні UtmCapture
+    // сақтап үлгереді, query де бірге кетеді.
+    if (new URLSearchParams(window.location.search).has("utm_campaign")) {
+      window.location.replace(`/baikau${window.location.search}`);
+      return;
+    }
     getUpcomingSessions().then((data) => {
       setSessions(data);
       setLoaded(true);
