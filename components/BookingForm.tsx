@@ -8,7 +8,7 @@ import type { SessionDetail } from "@/lib/sessions";
 type Student = { id: string; full_name: string };
 
 // Офлайн тіркелу уақытша жабық — қайта ашу үшін false қойыңыз.
-const OFFLINE_CLOSED = true;
+export const OFFLINE_CLOSED = true;
 
 export default function BookingForm({
   session,
