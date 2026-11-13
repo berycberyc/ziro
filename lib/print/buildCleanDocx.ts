@@ -783,9 +783,28 @@ async function buildQuantityDoc(
   /** Қай бөлікке жазып отырмыз: шарт, А немесе В. */
   let slot: "condition" | "a" | "b" = "condition";
 
+  // Басқа тілдегі суреттер — бөлік бойынша (шарт, А, В).
+  //
+  // Неге керек: сызба көбіне тек [kk] блогында тұрады, [ru] блогында
+  // қайталанбайды. Бұрын басқа тілдің абзацтары түгел тасталатын, сондықтан
+  // орысша нұсқада сандықтың суреттері жоғалып кететін. Негізгі пәндердегідей:
+  // өз тілінде суреті болмаса — басқа тілдегісін аламыз.
+  let other: Record<"condition" | "a" | "b", Element[]> = { condition: [], a: [], b: [] };
+
   const flush = () => {
-    if (cur) rows.push(cur);
+    if (cur) {
+      const parts: [Element[], Element[]][] = [
+        [cur.condition, other.condition],
+        [cur.colA, other.a],
+        [cur.colB, other.b],
+      ];
+      for (const [own, theirs] of parts) {
+        if (theirs.length > 0 && !own.some(hasImage)) own.push(...theirs);
+      }
+      rows.push(cur);
+    }
     cur = null;
+    other = { condition: [], a: [], b: [] };
   };
 
   for (const el of Array.from(body.children)) {
@@ -806,7 +825,16 @@ async function buildQuantityDoc(
       if (["kk", "қаз", "каз"].includes(key)) { mode = "kk"; slot = "condition"; continue; }
       if (["ru", "рус"].includes(key)) { mode = "ru"; slot = "condition"; continue; }
       if (/^[ab]_(баған|bagan)$/.test(key)) {
-        if (mode !== lang) continue;
+        if (mode !== lang) {
+          if ((mode === "kk" || mode === "ru") && cur) {
+            slot = key.startsWith("a") ? "a" : "b";
+            if (hasImage(el)) {
+              stripTagPrefix(el, "");
+              other[slot].push(el);
+            }
+          }
+          continue;
+        }
         slot = key.startsWith("a") ? "a" : "b";
         // Белгіні алып тастап, қалғанын сол ұяшыққа саламыз.
         stripTagPrefix(el, "");
@@ -819,7 +847,11 @@ async function buildQuantityDoc(
       continue;
     }
 
-    if (mode !== lang || !cur) continue;
+    if (!cur) continue;
+    if (mode !== lang) {
+      if ((mode === "kk" || mode === "ru") && hasImage(el)) other[slot].push(el);
+      continue;
+    }
     if (isPageBreakOnly(el)) continue;
     if (!paragraphText(el) && !hasImage(el) && !hasMath(el)) continue;
 
