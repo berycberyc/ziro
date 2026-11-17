@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/LangContext";
 import { supabase } from "@/lib/supabase";
 import AuthForm from "@/components/AuthForm";
@@ -9,6 +10,7 @@ import { readSavedUtm } from "@/lib/utm";
 
 export default function RegisterPage() {
   const { t, lang } = useLang();
+  const router = useRouter();
   const [registered, setRegistered] = useState(false);
 
   async function handleRegister(values: Record<string, string>) {
@@ -16,7 +18,7 @@ export default function RegisterPage() {
     // «Бізді қайдан білдіңіз?» жауабы. Екеуі де міндетті емес.
     const utm = readSavedUtm();
     const heardFrom = HEARD_FROM_OPTIONS.some((o) => o.value === values.heardFrom) ? values.heardFrom : "";
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: values.email,
       password: values.password,
       options: {
@@ -33,8 +35,12 @@ export default function RegisterPage() {
       },
     });
     if (error) throw error;
-    // Email confirmation is required now — don't redirect to /dashboard,
-    // the parent can only log in after clicking the link in their email.
+    // Email растау өшірулі болса — сессия бірден келеді, кабинетке өтеміз.
+    // Қосулы болса — «поштаңызды қараңыз» экраны.
+    if (data.session) {
+      router.push("/dashboard");
+      return;
+    }
     setRegistered(true);
   }
 
